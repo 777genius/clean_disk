@@ -92,6 +92,9 @@ class _ScanHomePageState extends State<ScanHomePage> {
           key: const ValueKey('scan-workspace-view'),
           store: widget.store,
           activeTarget: _activeTarget,
+          canChangeTarget:
+              widget.config.requiresInitialTargetSelection &&
+              widget.store.canPickScanTarget,
           searchController: _searchController,
           searchFocusNode: _searchFocusNode,
           canScan: _canRunScan,
@@ -788,6 +791,7 @@ class ScanWorkspaceView extends StatelessWidget {
     super.key,
     required this.store,
     required this.activeTarget,
+    required this.canChangeTarget,
     required this.searchController,
     required this.searchFocusNode,
     required this.canScan,
@@ -813,6 +817,7 @@ class ScanWorkspaceView extends StatelessWidget {
 
   final ScanWorkspaceStore store;
   final ScanTarget activeTarget;
+  final bool canChangeTarget;
   final TextEditingController searchController;
   final FocusNode searchFocusNode;
   final bool canScan;
@@ -874,6 +879,7 @@ class ScanWorkspaceView extends StatelessWidget {
                           ? _CompactWorkspace(
                               store: store,
                               activeTarget: activeTarget,
+                              canChangeTarget: canChangeTarget,
                               onScan: onScan,
                               onPickTarget: onPickTarget,
                               onPermissionProbe: onPermissionProbe,
@@ -887,6 +893,7 @@ class ScanWorkspaceView extends StatelessWidget {
                           : _WideWorkspace(
                               store: store,
                               activeTarget: activeTarget,
+                              canChangeTarget: canChangeTarget,
                               onScan: onScan,
                               onPickTarget: onPickTarget,
                               onPermissionProbe: onPermissionProbe,
@@ -1189,6 +1196,7 @@ class _WideWorkspace extends StatelessWidget {
   const _WideWorkspace({
     required this.store,
     required this.activeTarget,
+    required this.canChangeTarget,
     required this.onScan,
     required this.onPickTarget,
     required this.onPermissionProbe,
@@ -1208,6 +1216,7 @@ class _WideWorkspace extends StatelessWidget {
 
   final ScanWorkspaceStore store;
   final ScanTarget activeTarget;
+  final bool canChangeTarget;
   final VoidCallback? onScan;
   final VoidCallback onPickTarget;
   final VoidCallback onPermissionProbe;
@@ -1234,6 +1243,7 @@ class _WideWorkspace extends StatelessWidget {
           child: _TargetRail(
             store: store,
             activeTarget: activeTarget,
+            canChangeTarget: canChangeTarget,
             onPickTarget: onPickTarget,
             onPermissionProbe: onPermissionProbe,
             onPermissionRepair: onPermissionRepair,
@@ -1298,6 +1308,7 @@ class _CompactWorkspace extends StatelessWidget {
   const _CompactWorkspace({
     required this.store,
     required this.activeTarget,
+    required this.canChangeTarget,
     required this.onScan,
     required this.onPickTarget,
     required this.onPermissionProbe,
@@ -1311,6 +1322,7 @@ class _CompactWorkspace extends StatelessWidget {
 
   final ScanWorkspaceStore store;
   final ScanTarget activeTarget;
+  final bool canChangeTarget;
   final VoidCallback? onScan;
   final VoidCallback onPickTarget;
   final VoidCallback onPermissionProbe;
@@ -1331,8 +1343,8 @@ class _CompactWorkspace extends StatelessWidget {
       child: Column(
         children: [
           _TargetChips(
-            store: store,
             activeTarget: activeTarget,
+            canChangeTarget: canChangeTarget,
             onPickTarget: onPickTarget,
           ),
           const SizedBox(height: 10),
@@ -1607,6 +1619,7 @@ class _TargetRail extends StatelessWidget {
   const _TargetRail({
     required this.store,
     required this.activeTarget,
+    required this.canChangeTarget,
     required this.onPickTarget,
     required this.onPermissionProbe,
     required this.onPermissionRepair,
@@ -1614,6 +1627,7 @@ class _TargetRail extends StatelessWidget {
 
   final ScanWorkspaceStore store;
   final ScanTarget activeTarget;
+  final bool canChangeTarget;
   final VoidCallback onPickTarget;
   final VoidCallback onPermissionProbe;
   final VoidCallback onPermissionRepair;
@@ -1635,10 +1649,8 @@ class _TargetRail extends StatelessWidget {
                     ? _formatRowsSize(_summaryRows(store))
                     : null,
                 selected: true,
-                onTap: store.canPickScanTarget ? onPickTarget : null,
-                trailing: _TargetPickIndicator(
-                  enabled: store.canPickScanTarget,
-                ),
+                onTap: canChangeTarget ? onPickTarget : null,
+                trailing: canChangeTarget ? const _TargetPickIndicator() : null,
               ),
               const SizedBox(height: 12),
               _PermissionProofCard(
@@ -1660,13 +1672,13 @@ class _TargetRail extends StatelessWidget {
 
 class _TargetChips extends StatelessWidget {
   const _TargetChips({
-    required this.store,
     required this.activeTarget,
+    required this.canChangeTarget,
     required this.onPickTarget,
   });
 
-  final ScanWorkspaceStore store;
   final ScanTarget activeTarget;
+  final bool canChangeTarget;
   final VoidCallback onPickTarget;
 
   @override
@@ -1675,8 +1687,8 @@ class _TargetChips extends StatelessWidget {
       icon: Icons.folder_open_outlined,
       label: _targetDisplayName(activeTarget),
       selected: true,
-      onTap: store.canPickScanTarget ? onPickTarget : null,
-      trailing: _TargetPickIndicator(enabled: store.canPickScanTarget),
+      onTap: canChangeTarget ? onPickTarget : null,
+      trailing: canChangeTarget ? const _TargetPickIndicator() : null,
     );
   }
 }
@@ -3143,9 +3155,7 @@ class _TargetItem extends StatelessWidget {
 }
 
 class _TargetPickIndicator extends StatelessWidget {
-  const _TargetPickIndicator({required this.enabled});
-
-  final bool enabled;
+  const _TargetPickIndicator();
 
   @override
   Widget build(BuildContext context) {
@@ -3155,7 +3165,7 @@ class _TargetPickIndicator extends StatelessWidget {
       child: Icon(
         Icons.keyboard_arrow_down_rounded,
         size: 20,
-        color: enabled ? _ScanColors.cyan : _ScanColors.textSoft.withAlpha(110),
+        color: _ScanColors.cyan,
       ),
     );
   }
@@ -3178,53 +3188,59 @@ class _ChipTarget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final content = Container(
+      key: onTap == null && selected
+          ? const ValueKey('scan-target-chip-current')
+          : null,
+      height: 42,
+      decoration: BoxDecoration(
+        color: selected ? _ScanColors.selectedSoft : _ScanColors.panel,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: selected ? _ScanColors.cyan : _ScanColors.border,
+        ),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 12),
+          Icon(
+            icon,
+            color: selected ? _ScanColors.cyan : Colors.white,
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              style: _bodyStyle(context).copyWith(
+                color: selected ? _ScanColors.cyan : Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          if (trailing case final trailing?) ...[
+            const SizedBox(width: 8),
+            trailing,
+          ],
+          const SizedBox(width: 8),
+        ],
+      ),
+    );
+    if (onTap == null) {
+      return content;
+    }
+
     final chip = Material(
-      color: selected ? _ScanColors.selectedSoft : _ScanColors.panel,
+      color: Colors.transparent,
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         key: selected ? const ValueKey('scan-target-chip-current') : null,
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
-        child: Container(
-          height: 42,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: selected ? _ScanColors.cyan : _ScanColors.border,
-            ),
-          ),
-          child: Row(
-            children: [
-              const SizedBox(width: 12),
-              Icon(
-                icon,
-                color: selected ? _ScanColors.cyan : Colors.white,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  label,
-                  overflow: TextOverflow.ellipsis,
-                  style: _bodyStyle(context).copyWith(
-                    color: selected ? _ScanColors.cyan : Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              if (trailing case final trailing?) ...[
-                const SizedBox(width: 8),
-                trailing,
-              ],
-              const SizedBox(width: 8),
-            ],
-          ),
-        ),
+        child: content,
       ),
     );
-    if (onTap == null) {
-      return chip;
-    }
     return Tooltip(
       message: context.cleanDiskL10n.targetChangeAction,
       child: chip,

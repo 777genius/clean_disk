@@ -840,6 +840,10 @@ void main() {
     final result = await _pumpScanHome(
       tester,
       size: const Size(1440, 900),
+      config: const ScanWorkspaceConfig(requiresInitialTargetSelection: true),
+      targetPreferenceStore: _RecordingScanTargetPreferenceStore(
+        initial: _target('/'),
+      ),
       targetPicker: picker,
     );
 
@@ -859,7 +863,7 @@ void main() {
     );
   });
 
-  testWidgets('wide target row has a full-width change target action', (
+  testWidgets('configured target row is static when config target wins', (
     tester,
   ) async {
     final picker = _RecordingScanTargetPicker(ScanTargetPath('/Users/belief'));
@@ -873,6 +877,27 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(picker.initialPaths, isEmpty);
+    expect(
+      find.byKey(const ValueKey('scan-target-picker-action')),
+      findsNothing,
+    );
+    expect(find.byIcon(Icons.keyboard_arrow_down_rounded), findsNothing);
+    expect(find.byTooltip('Change folder'), findsNothing);
+  });
+
+  testWidgets('wide saved target row has a full-width change target action', (
+    tester,
+  ) async {
+    final picker = _RecordingScanTargetPicker(ScanTargetPath('/Users/belief'));
+    await _pumpScanHome(
+      tester,
+      size: const Size(1440, 900),
+      config: const ScanWorkspaceConfig(requiresInitialTargetSelection: true),
+      targetPreferenceStore: _RecordingScanTargetPreferenceStore(
+        initial: _target('/'),
+      ),
+      targetPicker: picker,
+    );
 
     expect(find.byTooltip('Change folder'), findsOneWidget);
     expect(
