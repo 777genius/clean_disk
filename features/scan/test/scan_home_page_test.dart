@@ -195,6 +195,40 @@ void main() {
     },
   );
 
+  testWidgets('running footer shows elapsed time and item rate', (
+    tester,
+  ) async {
+    final fixture = FakeScanFeatureFixture(
+      repository: FakeScanRepository()..deferStartCompletion = true,
+    );
+    final result = await _pumpScanHome(
+      tester,
+      fixture: fixture,
+      size: const Size(1440, 900),
+    );
+    await result.store.start(_scanCommand());
+    await tester.pump();
+
+    result.fixture.eventClient.add(
+      ScanEventEnvelope(
+        protocolVersion: ProtocolVersion.current,
+        sequence: EventSequence('2'),
+        emittedAtUnixMs: BigInt.from(1700000000002),
+        event: ScanProgressed(
+          sessionId: FakeScanRepository.sessionId,
+          progress: ScanProgress(
+            scannedItems: BigInt.from(1000),
+            elapsedMs: BigInt.from(1000),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('00:00:01'), findsOneWidget);
+    expect(find.text('1.0k items/s'), findsOneWidget);
+  });
+
   testWidgets('running footer progress is determinate and monotonic', (
     tester,
   ) async {

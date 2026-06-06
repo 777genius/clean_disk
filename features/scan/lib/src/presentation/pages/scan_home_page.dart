@@ -2518,9 +2518,7 @@ class _ScanFooterState extends State<_ScanFooter>
                             Expanded(
                               child: _FooterStat(
                                 label: l10n.progressThroughputLabel,
-                                value: progress?.throughputBytesPerSec == null
-                                    ? l10n.metricNoDataValue
-                                    : '${_formatBytes(progress!.throughputBytesPerSec!)} /s',
+                                value: _progressThroughputText(l10n, progress),
                                 compact: true,
                               ),
                             ),
@@ -2573,9 +2571,7 @@ class _ScanFooterState extends State<_ScanFooter>
                         ),
                         _FooterStat(
                           label: l10n.progressThroughputLabel,
-                          value: progress?.throughputBytesPerSec == null
-                              ? l10n.metricNoDataValue
-                              : '${_formatBytes(progress!.throughputBytesPerSec!)} /s',
+                          value: _progressThroughputText(l10n, progress),
                         ),
                       ],
                     ),
@@ -4972,6 +4968,32 @@ String _progressItemsText(CleanDiskLocalizations l10n, ScanProgress? progress) {
   return scannedItems.toString();
 }
 
+String _progressThroughputText(
+  CleanDiskLocalizations l10n,
+  ScanProgress? progress,
+) {
+  if (progress == null) {
+    return l10n.metricNoDataValue;
+  }
+  final bytesPerSecond = progress.throughputBytesPerSec;
+  if (bytesPerSecond != null) {
+    return '${_formatBytes(bytesPerSecond)} /s';
+  }
+
+  final elapsedMs = progress.elapsedMs;
+  if (elapsedMs == null || elapsedMs <= BigInt.zero) {
+    return l10n.metricNoDataValue;
+  }
+
+  final itemsPerSecond =
+      progress.scannedItems.toDouble() / (elapsedMs.toDouble() / 1000);
+  if (!itemsPerSecond.isFinite || itemsPerSecond <= 0) {
+    return l10n.metricNoDataValue;
+  }
+
+  return '${_formatRate(itemsPerSecond)} ${l10n.progressItemsPerSecondSuffix}';
+}
+
 String _targetDisplayName(ScanTarget target) {
   final parts = target.path.value
       .split(RegExp(r'[/\\]+'))
@@ -5185,6 +5207,16 @@ String _formatElapsed(BigInt elapsedMs) {
   final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
   final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
   return '$hours:$minutes:$seconds';
+}
+
+String _formatRate(double value) {
+  if (value >= 1000) {
+    return '${(value / 1000).toStringAsFixed(1)}k';
+  }
+  if (value >= 10) {
+    return value.toStringAsFixed(0);
+  }
+  return value.toStringAsFixed(1);
 }
 
 String _deletePlanStateText(

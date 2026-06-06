@@ -549,6 +549,10 @@
   "@progressThroughputLabel": {
     "description": "Label for scan throughput in the progress footer."
   },
+  "progressItemsPerSecondSuffix": "items/s",
+  "@progressItemsPerSecondSuffix": {
+    "description": "Suffix for scan traversal rate when byte throughput is not available."
+  },
   "metricNoDataValue": "No data",
   "@metricNoDataValue": {
     "description": "Readable value shown when a scan metric is not available yet."

@@ -438,6 +438,9 @@ class CleanDiskLocalizationsRu extends CleanDiskLocalizations {
   String get progressThroughputLabel => 'Скорость';
 
   @override
+  String get progressItemsPerSecondSuffix => 'элем./с';
+
+  @override
   String get metricNoDataValue => 'Нет данных';
 
   @override

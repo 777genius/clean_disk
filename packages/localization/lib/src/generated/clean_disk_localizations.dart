@@ -881,6 +881,12 @@ abstract class CleanDiskLocalizations {
   /// **'Throughput'**
   String get progressThroughputLabel;
 
+  /// Suffix for scan traversal rate when byte throughput is not available.
+  ///
+  /// In en, this message translates to:
+  /// **'items/s'**
+  String get progressItemsPerSecondSuffix;
+
   /// Readable value shown when a scan metric is not available yet.
   ///
   /// In en, this message translates to:

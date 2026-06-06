@@ -432,6 +432,9 @@ class CleanDiskLocalizationsEn extends CleanDiskLocalizations {
   String get progressThroughputLabel => 'Throughput';
 
   @override
+  String get progressItemsPerSecondSuffix => 'items/s';
+
+  @override
   String get metricNoDataValue => 'No data';
 
   @override

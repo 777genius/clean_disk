@@ -137,6 +137,7 @@
   "progressFilesScannedLabel": "Файлы",
   "progressElapsedLabel": "Время",
   "progressThroughputLabel": "Скорость",
+  "progressItemsPerSecondSuffix": "элем./с",
   "metricNoDataValue": "Нет данных",
   "metricRunScanSubtitle": "После скана",
   "filesCountSuffix": "файлов",

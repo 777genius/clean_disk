@@ -56,7 +56,7 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
     },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::broadcast;
 
@@ -398,6 +398,7 @@ impl SessionRegistry {
                 session: None,
                 cancellation,
                 cancel_requested: false,
+                started_at: Instant::now(),
                 events: BoundedEventBuffer::new(
                     std::num::NonZeroUsize::new(self.event_buffer_limit)
                         .expect("event buffer limit is non-zero"),
@@ -656,6 +657,7 @@ struct SessionRecord {
     session: Option<ScanSession>,
     cancellation: CancellationToken,
     cancel_requested: bool,
+    started_at: Instant,
     events: BoundedEventBuffer,
 }
 
@@ -3186,6 +3188,9 @@ fn status_from_session(session: &ScanSession) -> ScanSessionStatusDto {
 }
 
 fn latest_progress(record: &SessionRecord) -> Option<ScanProgressDto> {
+    let elapsed_ms = DecimalU64Dto::from_u64(
+        u64::try_from(record.started_at.elapsed().as_millis()).unwrap_or(u64::MAX),
+    );
     record
         .events
         .events()
@@ -3194,7 +3199,7 @@ fn latest_progress(record: &SessionRecord) -> Option<ScanProgressDto> {
         .find_map(|event| match event {
             ScanEvent::Progress { scanned_items, .. } => Some(ScanProgressDto::new(
                 DecimalU64Dto::from_u64(*scanned_items),
-                None,
+                Some(elapsed_ms.clone()),
                 None,
             )),
             _ => None,
@@ -3564,6 +3569,30 @@ mod tests {
         let live_event = live_events.try_recv().expect("live event");
         assert_eq!(live_event.sequence().to_u64(), 1);
         assert_eq!(registry.event_envelopes(), vec![live_event]);
+    }
+
+    #[test]
+    fn running_status_progress_includes_elapsed_time() {
+        let budget = WorkerBudget::for_profile_with_parallelism(
+            ScanResourceProfile::Balanced,
+            std::num::NonZeroUsize::new(4).expect("cores"),
+        );
+        let registry = SessionRegistry::new(budget, 8, 1);
+        let session_id = ScanSessionId::new(1).expect("session id");
+        registry.insert_running(session_id, CancellationToken::new());
+        registry.push_event(
+            session_id,
+            ScanEvent::Progress {
+                session_id,
+                scanned_items: 10,
+            },
+        );
+
+        let status = registry.status(session_id).expect("running status");
+        let value = serde_json::to_value(status).expect("status json");
+
+        assert_eq!(value["progress"]["scannedItems"], "10");
+        assert!(value["progress"]["elapsedMs"].as_str().is_some());
     }
 
     #[tokio::test]
