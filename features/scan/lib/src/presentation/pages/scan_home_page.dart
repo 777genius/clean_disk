@@ -278,10 +278,17 @@ class _ScanHomePageState extends State<ScanHomePage> {
   }
 
   Future<void> _executeCleanup(ScanWorkspaceStore store) async {
-    final confirmed = await _showCleanupConfirmDialog(
-      context,
-      store.deletePlan,
+    _commandSequence += 1;
+    final plan = await store.prepareCleanupPlan(
+      commandId: CommandId('$_commandSequence'),
+      target: _activeTarget,
     );
+    _markStoreChanged();
+    if (!mounted || plan == null) {
+      return;
+    }
+
+    final confirmed = await _showCleanupConfirmDialog(context, plan);
     if (!mounted || !confirmed) {
       return;
     }

@@ -24,6 +24,14 @@ abstract interface class ScanRepository {
 
   Future<Result<NodeDetails>> getNodeDetails(NodeDetailsQuery query);
 
+  Future<Result<ValidatedCleanupPlan>> createCleanupPlan(
+    CreateCleanupPlanCommand command,
+  );
+
+  Future<Result<CleanupReceipt>> executeCleanupPlan(
+    ExecuteCleanupPlanCommand command,
+  );
+
   Future<Result<CleanupReceipt>> executeCleanup(ExecuteCleanupCommand command);
 
   Future<Result<CleanupRecoveryInbox>> getCleanupRecoveryInbox();

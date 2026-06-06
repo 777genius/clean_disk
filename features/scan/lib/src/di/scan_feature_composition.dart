@@ -6,8 +6,9 @@ import 'package:clean_disk_scan/src/application/ports/scan_target_catalog.dart';
 import 'package:clean_disk_scan/src/application/ports/scan_target_picker.dart';
 import 'package:clean_disk_scan/src/application/ports/scan_target_preference_store.dart';
 import 'package:clean_disk_scan/src/application/use_cases/cancel_scan_use_case.dart';
+import 'package:clean_disk_scan/src/application/use_cases/create_cleanup_plan_use_case.dart';
 import 'package:clean_disk_scan/src/application/use_cases/dispose_scan_use_case.dart';
-import 'package:clean_disk_scan/src/application/use_cases/execute_cleanup_use_case.dart';
+import 'package:clean_disk_scan/src/application/use_cases/execute_cleanup_plan_use_case.dart';
 import 'package:clean_disk_scan/src/application/use_cases/get_capabilities_use_case.dart';
 import 'package:clean_disk_scan/src/application/use_cases/get_children_page_use_case.dart';
 import 'package:clean_disk_scan/src/application/use_cases/get_cleanup_recovery_inbox_use_case.dart';
@@ -46,7 +47,8 @@ final class ScanUseCaseBundle {
     required this.searchNodes,
     required this.getTopItems,
     required this.getNodeDetails,
-    required this.executeCleanup,
+    required this.createCleanupPlan,
+    required this.executeCleanupPlan,
     required this.getCleanupRecoveryInbox,
     required this.watchScanEvents,
   });
@@ -88,7 +90,8 @@ final class ScanUseCaseBundle {
       searchNodes: SearchNodesUseCase(repository),
       getTopItems: GetTopItemsUseCase(repository),
       getNodeDetails: GetNodeDetailsUseCase(repository),
-      executeCleanup: ExecuteCleanupUseCase(repository),
+      createCleanupPlan: CreateCleanupPlanUseCase(repository),
+      executeCleanupPlan: ExecuteCleanupPlanUseCase(repository),
       getCleanupRecoveryInbox: GetCleanupRecoveryInboxUseCase(repository),
       watchScanEvents: WatchScanEventsUseCase(eventClient),
     );
@@ -111,7 +114,8 @@ final class ScanUseCaseBundle {
   final SearchNodesUseCase searchNodes;
   final GetTopItemsUseCase getTopItems;
   final GetNodeDetailsUseCase getNodeDetails;
-  final ExecuteCleanupUseCase executeCleanup;
+  final CreateCleanupPlanUseCase createCleanupPlan;
+  final ExecuteCleanupPlanUseCase executeCleanupPlan;
   final GetCleanupRecoveryInboxUseCase getCleanupRecoveryInbox;
   final WatchScanEventsUseCase watchScanEvents;
 
@@ -133,7 +137,8 @@ final class ScanUseCaseBundle {
       searchNodes: searchNodes,
       getTopItems: getTopItems,
       getNodeDetails: getNodeDetails,
-      executeCleanup: executeCleanup,
+      createCleanupPlan: createCleanupPlan,
+      executeCleanupPlan: executeCleanupPlan,
       getCleanupRecoveryInbox: getCleanupRecoveryInbox,
       watchScanEvents: watchScanEvents,
     );

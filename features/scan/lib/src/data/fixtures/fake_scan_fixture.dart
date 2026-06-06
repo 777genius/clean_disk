@@ -123,6 +123,7 @@ final class FakeScanRepository implements ScanRepository {
   PermissionProbe permissionProbe = _defaultPermissionProbe;
   final List<ScanTarget> permissionProbeTargets = [];
   final List<SearchPageQuery> searchQueries = [];
+  final Map<CleanupPlanId, List<CleanupPlanItemRef>> _cleanupPlanItemsById = {};
   int _eventSequence = 0;
   int _scanSequence = 0;
   ScanSessionId _currentSessionId = sessionId;
@@ -374,6 +375,57 @@ final class FakeScanRepository implements ScanRepository {
         issues: List.unmodifiable(node.issues),
       ),
     );
+  }
+
+  @override
+  Future<Result<ValidatedCleanupPlan>> createCleanupPlan(
+    CreateCleanupPlanCommand command,
+  ) async {
+    final planId = CleanupPlanId('1');
+    _cleanupPlanItemsById[planId] = List.unmodifiable(command.items);
+    return Result.success(
+      ValidatedCleanupPlan(
+        planId: planId,
+        commandId: command.commandId,
+        state: ValidatedCleanupPlanState.ready,
+        items: command.items
+            .map(
+              (item) => ValidatedCleanupPlanItem(
+                itemRef: item,
+                displayName: _nodes[item.nodeId]?.name ?? item.nodeId.value,
+                state: ValidatedCleanupPlanItemState.ready,
+                reason: null,
+              ),
+            )
+            .toList(growable: false),
+      ),
+    );
+  }
+
+  @override
+  Future<Result<CleanupReceipt>> executeCleanupPlan(
+    ExecuteCleanupPlanCommand command,
+  ) async {
+    final items = _cleanupPlanItemsById[command.planId] ?? const [];
+    final receipt = CleanupReceipt(
+      operationId: command.commandId,
+      commandId: command.commandId,
+      state: CleanupReceiptState.completed,
+      lowDiskReserveReady: true,
+      items: items
+          .map(
+            (item) => CleanupReceiptItem(
+              nodeId: item.nodeId,
+              displayName: _nodes[item.nodeId]?.name ?? item.nodeId.value,
+              state: CleanupItemOutcomeState.movedToTrash,
+              restoreExpectation: RestoreExpectationLevel.platformTrashManual,
+              reason: null,
+            ),
+          )
+          .toList(growable: false),
+    );
+    lastCleanupReceipt = receipt;
+    return Result.success(receipt);
   }
 
   @override

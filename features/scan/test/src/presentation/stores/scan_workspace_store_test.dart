@@ -8,8 +8,9 @@ import 'package:clean_disk_scan/src/application/ports/scan_repository.dart';
 import 'package:clean_disk_scan/src/application/ports/scan_target_catalog.dart';
 import 'package:clean_disk_scan/src/application/ports/scan_target_preference_store.dart';
 import 'package:clean_disk_scan/src/application/use_cases/cancel_scan_use_case.dart';
+import 'package:clean_disk_scan/src/application/use_cases/create_cleanup_plan_use_case.dart';
 import 'package:clean_disk_scan/src/application/use_cases/dispose_scan_use_case.dart';
-import 'package:clean_disk_scan/src/application/use_cases/execute_cleanup_use_case.dart';
+import 'package:clean_disk_scan/src/application/use_cases/execute_cleanup_plan_use_case.dart';
 import 'package:clean_disk_scan/src/application/use_cases/get_capabilities_use_case.dart';
 import 'package:clean_disk_scan/src/application/use_cases/get_children_page_use_case.dart';
 import 'package:clean_disk_scan/src/application/use_cases/get_cleanup_recovery_inbox_use_case.dart';
@@ -1163,7 +1164,7 @@ void main() {
     },
   );
 
-  test('cleanup execution sends snapshot refs and records receipt', () async {
+  test('cleanup execution requires server plan and records receipt', () async {
     final repository = _FakeScanRepository();
     final eventClient = _FakeScanEventClient();
     final store = _store(repository, eventClient);
@@ -1186,18 +1187,34 @@ void main() {
     await store.checkDaemonCompatibility();
     await store.start(_startCommand());
     store.queueNode(_node(id: '10', name: 'alpha.log'));
+    await store.prepareCleanupPlan(
+      commandId: CommandId('76'),
+      target: _startCommand().targets.single,
+    );
     await store.executeCleanup(CommandId('77'));
 
-    expect(repository.cleanupCommands.single.commandId, CommandId('77'));
+    expect(repository.cleanupPlanCommands.single.commandId, CommandId('76'));
     expect(
-      repository.cleanupCommands.single.items.single.sessionId,
+      repository.cleanupPlanCommands.single.items.single.sessionId,
       ScanSessionId('1'),
     );
     expect(
-      repository.cleanupCommands.single.items.single.snapshotId,
+      repository.cleanupPlanCommands.single.items.single.snapshotId,
       SnapshotId('2'),
     );
-    expect(repository.cleanupCommands.single.items.single.nodeId, NodeId('10'));
+    expect(
+      repository.cleanupPlanCommands.single.items.single.nodeId,
+      NodeId('10'),
+    );
+    expect(
+      repository.cleanupPlanExecuteCommands.single.commandId,
+      CommandId('77'),
+    );
+    expect(
+      repository.cleanupPlanExecuteCommands.single.planId,
+      CleanupPlanId('55'),
+    );
+    expect(repository.cleanupCommands, isEmpty);
     expect(store.cleanupReceipt?.state, CleanupReceiptState.completed);
     expect(
       store.cleanupReceipt?.items.single.state,
@@ -1210,6 +1227,94 @@ void main() {
 
     expect(store.queuedItems, isEmpty);
     expect(store.lastFailure?.message, 'Node was already moved to Trash');
+  });
+
+  test(
+    'cleanup execution fails closed without a prepared server plan',
+    () async {
+      final repository = _FakeScanRepository();
+      final eventClient = _FakeScanEventClient();
+      final store = _store(repository, eventClient);
+      repository.capabilities = Result.success(
+        _capabilities(
+          version: ProtocolVersion.current,
+          runtimeProof: _verifiedRuntimeProof(),
+        ),
+      );
+      repository.startStatus = Result.success(
+        ScanSessionStatus(
+          sessionId: ScanSessionId('1'),
+          state: SessionState.completed,
+          snapshotId: SnapshotId('2'),
+          rootNodeIds: [NodeId('1')],
+          progress: null,
+        ),
+      );
+
+      await store.checkDaemonCompatibility();
+      await store.start(_startCommand());
+      store.queueNode(_node(id: '10', name: 'alpha.log'));
+      await store.executeCleanup(CommandId('77'));
+
+      expect(repository.cleanupPlanExecuteCommands, isEmpty);
+      expect(
+        store.lastFailure?.message,
+        'Cleanup plan must be validated before execution',
+      );
+    },
+  );
+
+  test('server blocked cleanup plan is not executable', () async {
+    final repository = _FakeScanRepository();
+    final eventClient = _FakeScanEventClient();
+    final store = _store(repository, eventClient);
+    repository.capabilities = Result.success(
+      _capabilities(
+        version: ProtocolVersion.current,
+        runtimeProof: _verifiedRuntimeProof(),
+      ),
+    );
+    repository.startStatus = Result.success(
+      ScanSessionStatus(
+        sessionId: ScanSessionId('1'),
+        state: SessionState.completed,
+        snapshotId: SnapshotId('2'),
+        rootNodeIds: [NodeId('1')],
+        progress: null,
+      ),
+    );
+    repository.cleanupPlanResult = Result.success(
+      ValidatedCleanupPlan(
+        planId: CleanupPlanId('56'),
+        commandId: CommandId('76'),
+        state: ValidatedCleanupPlanState.blocked,
+        items: [
+          ValidatedCleanupPlanItem(
+            itemRef: CleanupPlanItemRef(
+              sessionId: ScanSessionId('1'),
+              snapshotId: SnapshotId('2'),
+              nodeId: NodeId('10'),
+            ),
+            displayName: 'alpha.log',
+            state: ValidatedCleanupPlanItemState.blocked,
+            reason: 'stale file identity',
+          ),
+        ],
+      ),
+    );
+
+    await store.checkDaemonCompatibility();
+    await store.start(_startCommand());
+    store.queueNode(_node(id: '10', name: 'alpha.log'));
+    final plan = await store.prepareCleanupPlan(
+      commandId: CommandId('76'),
+      target: _startCommand().targets.single,
+    );
+
+    expect(plan, isNull);
+    expect(repository.cleanupPlanCommands, hasLength(1));
+    expect(store.validatedCleanupPlan?.planId, CleanupPlanId('56'));
+    expect(store.lastFailure?.message, 'stale file identity');
   });
 
   test('late progress events do not regress a completed session', () async {
@@ -1432,7 +1537,8 @@ ScanWorkspaceStore _store(
     searchNodes: SearchNodesUseCase(repository),
     getTopItems: GetTopItemsUseCase(repository),
     getNodeDetails: GetNodeDetailsUseCase(repository),
-    executeCleanup: ExecuteCleanupUseCase(repository),
+    createCleanupPlan: CreateCleanupPlanUseCase(repository),
+    executeCleanupPlan: ExecuteCleanupPlanUseCase(repository),
     getCleanupRecoveryInbox: GetCleanupRecoveryInboxUseCase(repository),
     watchScanEvents: WatchScanEventsUseCase(eventClient),
   );
@@ -1646,8 +1752,12 @@ final class _FakeScanRepository implements ScanRepository {
   final List<Completer<Result<NodePage>>> searchCompleters = [];
   final List<TopItemsQuery> topItemsQueries = [];
   final List<ScanTarget> permissionProbeTargets = [];
+  final List<CreateCleanupPlanCommand> cleanupPlanCommands = [];
+  final List<ExecuteCleanupPlanCommand> cleanupPlanExecuteCommands = [];
   final List<ExecuteCleanupCommand> cleanupCommands = [];
   final List<SessionCommand> disposeCommands = [];
+  final Map<CleanupPlanId, List<CleanupPlanItemRef>> cleanupPlanItemsById = {};
+  Result<ValidatedCleanupPlan>? cleanupPlanResult;
   Result<CleanupRecoveryInbox> recoveryInbox = const Result.success(
     CleanupRecoveryInbox(interruptedReceipts: []),
   );
@@ -1739,6 +1849,63 @@ final class _FakeScanRepository implements ScanRepository {
         ),
         childIds: const [],
         issues: const [],
+      ),
+    );
+  }
+
+  @override
+  Future<Result<ValidatedCleanupPlan>> createCleanupPlan(
+    CreateCleanupPlanCommand command,
+  ) async {
+    cleanupPlanCommands.add(command);
+    final forced = cleanupPlanResult;
+    if (forced != null) {
+      return forced;
+    }
+    final planId = CleanupPlanId('55');
+    cleanupPlanItemsById[planId] = List.unmodifiable(command.items);
+    return Result.success(
+      ValidatedCleanupPlan(
+        planId: planId,
+        commandId: command.commandId,
+        state: ValidatedCleanupPlanState.ready,
+        items: command.items
+            .map(
+              (item) => ValidatedCleanupPlanItem(
+                itemRef: item,
+                displayName: item.nodeId.value,
+                state: ValidatedCleanupPlanItemState.ready,
+                reason: null,
+              ),
+            )
+            .toList(growable: false),
+      ),
+    );
+  }
+
+  @override
+  Future<Result<CleanupReceipt>> executeCleanupPlan(
+    ExecuteCleanupPlanCommand command,
+  ) async {
+    cleanupPlanExecuteCommands.add(command);
+    final items = cleanupPlanItemsById[command.planId] ?? const [];
+    return Result.success(
+      CleanupReceipt(
+        operationId: command.commandId,
+        commandId: command.commandId,
+        state: CleanupReceiptState.completed,
+        lowDiskReserveReady: true,
+        items: items
+            .map(
+              (item) => CleanupReceiptItem(
+                nodeId: item.nodeId,
+                displayName: item.nodeId.value,
+                state: CleanupItemOutcomeState.movedToTrash,
+                restoreExpectation: RestoreExpectationLevel.platformTrashManual,
+                reason: null,
+              ),
+            )
+            .toList(growable: false),
       ),
     );
   }

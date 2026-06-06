@@ -54,6 +54,10 @@ final class SnapshotId extends DecimalIdentifier {
   SnapshotId(super.value);
 }
 
+final class CleanupPlanId extends DecimalIdentifier {
+  CleanupPlanId(super.value);
+}
+
 final class NodeId extends DecimalIdentifier {
   NodeId(super.value);
 }
@@ -647,6 +651,66 @@ final class ExecuteCleanupCommand {
 
   final CommandId commandId;
   final List<CleanupPlanItemRef> items;
+}
+
+final class CreateCleanupPlanCommand {
+  const CreateCleanupPlanCommand({
+    required this.commandId,
+    required this.items,
+  });
+
+  final CommandId commandId;
+  final List<CleanupPlanItemRef> items;
+}
+
+final class ExecuteCleanupPlanCommand {
+  const ExecuteCleanupPlanCommand({
+    required this.commandId,
+    required this.planId,
+  });
+
+  final CommandId commandId;
+  final CleanupPlanId planId;
+}
+
+enum ValidatedCleanupPlanState { ready, blocked, unknown }
+
+enum ValidatedCleanupPlanItemState { ready, blocked, unknown }
+
+final class ValidatedCleanupPlanItem {
+  const ValidatedCleanupPlanItem({
+    required this.itemRef,
+    required this.displayName,
+    required this.state,
+    required this.reason,
+  });
+
+  final CleanupPlanItemRef itemRef;
+  final String displayName;
+  final ValidatedCleanupPlanItemState state;
+  final String? reason;
+
+  bool get isBlocked => state != ValidatedCleanupPlanItemState.ready;
+}
+
+final class ValidatedCleanupPlan {
+  const ValidatedCleanupPlan({
+    required this.planId,
+    required this.commandId,
+    required this.state,
+    required this.items,
+  });
+
+  final CleanupPlanId planId;
+  final CommandId commandId;
+  final ValidatedCleanupPlanState state;
+  final List<ValidatedCleanupPlanItem> items;
+
+  bool get canExecute {
+    return state == ValidatedCleanupPlanState.ready &&
+        items.isNotEmpty &&
+        !items.any((item) => item.isBlocked);
+  }
 }
 
 enum CleanupReceiptState {

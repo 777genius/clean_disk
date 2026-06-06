@@ -3,8 +3,9 @@ import 'dart:async';
 import 'package:clean_disk_core/clean_disk_core.dart';
 import 'package:clean_disk_scan/src/application/ports/scan_target_catalog.dart';
 import 'package:clean_disk_scan/src/application/use_cases/cancel_scan_use_case.dart';
+import 'package:clean_disk_scan/src/application/use_cases/create_cleanup_plan_use_case.dart';
 import 'package:clean_disk_scan/src/application/use_cases/dispose_scan_use_case.dart';
-import 'package:clean_disk_scan/src/application/use_cases/execute_cleanup_use_case.dart';
+import 'package:clean_disk_scan/src/application/use_cases/execute_cleanup_plan_use_case.dart';
 import 'package:clean_disk_scan/src/application/use_cases/get_capabilities_use_case.dart';
 import 'package:clean_disk_scan/src/application/use_cases/get_children_page_use_case.dart';
 import 'package:clean_disk_scan/src/application/use_cases/get_cleanup_recovery_inbox_use_case.dart';
@@ -134,7 +135,8 @@ final class ScanWorkspaceStore with Store {
     required SearchNodesUseCase searchNodes,
     required GetTopItemsUseCase getTopItems,
     required GetNodeDetailsUseCase getNodeDetails,
-    required ExecuteCleanupUseCase executeCleanup,
+    required CreateCleanupPlanUseCase createCleanupPlan,
+    required ExecuteCleanupPlanUseCase executeCleanupPlan,
     required GetCleanupRecoveryInboxUseCase getCleanupRecoveryInbox,
     required WatchScanEventsUseCase watchScanEvents,
   }) : _getCapabilities = getCapabilities,
@@ -153,7 +155,8 @@ final class ScanWorkspaceStore with Store {
        _searchNodes = searchNodes,
        _getTopItems = getTopItems,
        _getNodeDetails = getNodeDetails,
-       _executeCleanup = executeCleanup,
+       _createCleanupPlan = createCleanupPlan,
+       _executeCleanupPlan = executeCleanupPlan,
        _getCleanupRecoveryInbox = getCleanupRecoveryInbox,
        _watchScanEvents = watchScanEvents;
 
@@ -173,7 +176,8 @@ final class ScanWorkspaceStore with Store {
   final SearchNodesUseCase _searchNodes;
   final GetTopItemsUseCase _getTopItems;
   final GetNodeDetailsUseCase _getNodeDetails;
-  final ExecuteCleanupUseCase _executeCleanup;
+  final CreateCleanupPlanUseCase _createCleanupPlan;
+  final ExecuteCleanupPlanUseCase _executeCleanupPlan;
   final GetCleanupRecoveryInboxUseCase _getCleanupRecoveryInbox;
   final WatchScanEventsUseCase _watchScanEvents;
 
@@ -222,6 +226,8 @@ final class ScanWorkspaceStore with Store {
   final ObservableMap<NodeId, CleanupReceiptItem> _movedToTrashItems =
       ObservableMap<NodeId, CleanupReceiptItem>();
   final Observable<DeletePlan?> _deletePlan = Observable<DeletePlan?>(null);
+  final Observable<ValidatedCleanupPlan?> _validatedCleanupPlan =
+      Observable<ValidatedCleanupPlan?>(null);
   final Observable<CleanupReceipt?> _cleanupReceipt =
       Observable<CleanupReceipt?>(null);
   final Observable<CleanupRecoveryInbox> _cleanupRecoveryInbox = Observable(
@@ -341,6 +347,8 @@ final class ScanWorkspaceStore with Store {
   }
 
   DeletePlan get deletePlan => _deletePlan.value ?? _buildDeletePlanSnapshot();
+
+  ValidatedCleanupPlan? get validatedCleanupPlan => _validatedCleanupPlan.value;
 
   CleanupReceipt? get cleanupReceipt => _cleanupReceipt.value;
 
@@ -576,6 +584,7 @@ final class ScanWorkspaceStore with Store {
     await probeTargetPermission(target);
     runInAction(() {
       _deletePlan.value = _buildDeletePlanSnapshot();
+      _validatedCleanupPlan.value = null;
     });
   }
 
@@ -634,6 +643,7 @@ final class ScanWorkspaceStore with Store {
       _resetTreeProjection();
       _visibleRows.clear();
       _movedToTrashItems.clear();
+      _validatedCleanupPlan.value = null;
       _selectedNodeId.value = null;
       _selectedDetails.value = null;
       _viewport.value = ScanViewportState.initial.copyWith(
@@ -665,6 +675,9 @@ final class ScanWorkspaceStore with Store {
     final result = await _getScanStatus(currentSessionId);
     switch (result) {
       case ResultSuccess(:final value):
+        if (_isOlderSnapshotStatus(value)) {
+          return;
+        }
         runInAction(() {
           _applySessionStatus(value);
           _lastFailure.value = null;
@@ -1120,6 +1133,7 @@ final class ScanWorkspaceStore with Store {
         item: item,
       );
       _deletePlan.value = _buildDeletePlanSnapshot();
+      _validatedCleanupPlan.value = null;
     });
   }
 
@@ -1127,7 +1141,53 @@ final class ScanWorkspaceStore with Store {
     runInAction(() {
       _queuedItems.remove(nodeId);
       _deletePlan.value = _buildDeletePlanSnapshot();
+      _validatedCleanupPlan.value = null;
     });
+  }
+
+  Future<DeletePlan?> prepareCleanupPlan({
+    required CommandId commandId,
+    required ScanTarget target,
+  }) async {
+    await refreshCleanupPreview(target);
+    final plan = deletePlan;
+    if (!plan.canAuthorizeCleanup) {
+      _setFailure(
+        const AppFailure.validation(
+          message: 'Cleanup preview has blocking states',
+          field: 'deletePlan',
+        ),
+      );
+      return null;
+    }
+
+    final result = await _createCleanupPlan(
+      CreateCleanupPlanCommand(
+        commandId: commandId,
+        items: _cleanupItemRefsFromPlan(plan),
+      ),
+    );
+    switch (result) {
+      case ResultSuccess(:final value):
+        runInAction(() {
+          _validatedCleanupPlan.value = value;
+          _lastFailure.value = null;
+        });
+        if (!value.canExecute) {
+          _setFailure(
+            AppFailure.validation(
+              message: _serverCleanupBlockReason(value),
+              field: 'cleanupPlan',
+            ),
+          );
+          return null;
+        }
+        _notifyChanged();
+        return plan;
+      case ResultFailure(:final failure):
+        _setFailure(failure);
+        return null;
+    }
   }
 
   Future<void> executeCleanup(CommandId commandId) async {
@@ -1142,12 +1202,23 @@ final class ScanWorkspaceStore with Store {
       return;
     }
 
-    final result = await _executeCleanup(
-      ExecuteCleanupCommand(
+    final validatedPlan = _validatedCleanupPlan.value;
+    if (validatedPlan == null ||
+        !validatedPlan.canExecute ||
+        !_validatedPlanMatchesDeletePlan(validatedPlan, plan)) {
+      _setFailure(
+        const AppFailure.validation(
+          message: 'Cleanup plan must be validated before execution',
+          field: 'cleanupPlan',
+        ),
+      );
+      return;
+    }
+
+    final result = await _executeCleanupPlan(
+      ExecuteCleanupPlanCommand(
         commandId: commandId,
-        items: plan.items
-            .map((item) => CleanupPlanItemRef.fromIntent(item.intent))
-            .toList(),
+        planId: validatedPlan.planId,
       ),
     );
     switch (result) {
@@ -1161,6 +1232,7 @@ final class ScanWorkspaceStore with Store {
             }
           }
           _deletePlan.value = _buildDeletePlanSnapshot();
+          _validatedCleanupPlan.value = null;
           _lastFailure.value = null;
         });
         await refreshCleanupRecoveryInbox();
@@ -1307,6 +1379,63 @@ final class ScanWorkspaceStore with Store {
     }
     _lastEventSequence = sequence;
     return previous != null && current > previous + BigInt.one;
+  }
+
+  bool _isOlderSnapshotStatus(ScanSessionStatus status) {
+    final currentSessionId = sessionId;
+    if (currentSessionId != null && status.sessionId != currentSessionId) {
+      return true;
+    }
+    final currentSnapshotId = activeSnapshotId;
+    final nextSnapshotId = status.snapshotId;
+    if (currentSnapshotId == null || nextSnapshotId == null) {
+      return false;
+    }
+    return nextSnapshotId.toBigInt() < currentSnapshotId.toBigInt();
+  }
+
+  List<CleanupPlanItemRef> _cleanupItemRefsFromPlan(DeletePlan plan) {
+    return plan.items
+        .map((item) => CleanupPlanItemRef.fromIntent(item.intent))
+        .toList(growable: false);
+  }
+
+  bool _validatedPlanMatchesDeletePlan(
+    ValidatedCleanupPlan validatedPlan,
+    DeletePlan plan,
+  ) {
+    final currentRefs = _cleanupItemRefsFromPlan(plan);
+    if (validatedPlan.items.length != currentRefs.length) {
+      return false;
+    }
+    for (var index = 0; index < currentRefs.length; index += 1) {
+      if (!_sameCleanupPlanItemRef(
+        validatedPlan.items[index].itemRef,
+        currentRefs[index],
+      )) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _sameCleanupPlanItemRef(
+    CleanupPlanItemRef left,
+    CleanupPlanItemRef right,
+  ) {
+    return left.sessionId == right.sessionId &&
+        left.snapshotId == right.snapshotId &&
+        left.nodeId == right.nodeId;
+  }
+
+  String _serverCleanupBlockReason(ValidatedCleanupPlan plan) {
+    for (final item in plan.items) {
+      final reason = item.reason;
+      if (item.isBlocked && reason != null && reason.isNotEmpty) {
+        return reason;
+      }
+    }
+    return 'Cleanup plan has blocked items';
   }
 
   void _applyTreeRootPage(
@@ -1567,6 +1696,7 @@ final class ScanWorkspaceStore with Store {
     _resetTreeProjection();
     _queuedItems.clear();
     _movedToTrashItems.clear();
+    _validatedCleanupPlan.value = null;
     _cleanupReceipt.value = null;
     _viewport.value = ScanViewportState.initial.copyWith(
       pageSize: currentViewport.pageSize,

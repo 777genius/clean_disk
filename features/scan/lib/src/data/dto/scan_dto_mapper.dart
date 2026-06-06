@@ -49,12 +49,64 @@ extension ExecuteCleanupCommandDtoMapper on ExecuteCleanupCommand {
   }
 }
 
+extension CreateCleanupPlanCommandDtoMapper on CreateCleanupPlanCommand {
+  CreateCleanupPlanRequestDto toDto() {
+    return CreateCleanupPlanRequestDto(
+      protocolVersion: ProtocolVersionDto.current,
+      commandId: commandId.value,
+      items: items.map((item) => item.toDto()).toList(),
+    );
+  }
+}
+
+extension ExecuteCleanupPlanCommandDtoMapper on ExecuteCleanupPlanCommand {
+  ExecuteCleanupPlanRequestDto toDto() {
+    return ExecuteCleanupPlanRequestDto(
+      protocolVersion: ProtocolVersionDto.current,
+      commandId: commandId.value,
+      planId: planId.value,
+    );
+  }
+}
+
 extension CleanupPlanItemRefDtoMapper on CleanupPlanItemRef {
   CleanupPlanItemRefDto toDto() {
     return CleanupPlanItemRefDto(
       sessionId: sessionId.value,
       snapshotId: snapshotId.value,
       nodeId: nodeId.value,
+    );
+  }
+}
+
+extension CleanupPlanDtoMapper on CleanupPlanDto {
+  ValidatedCleanupPlan toDomain() {
+    return ValidatedCleanupPlan(
+      planId: CleanupPlanId(planId),
+      commandId: CommandId(commandId),
+      state: state.toValidatedCleanupPlanState(),
+      items: items.map((item) => item.toDomain()).toList(growable: false),
+    );
+  }
+}
+
+extension CleanupPlanItemDtoMapper on CleanupPlanItemDto {
+  ValidatedCleanupPlanItem toDomain() {
+    return ValidatedCleanupPlanItem(
+      itemRef: itemRef.toDomain(),
+      displayName: displayName,
+      state: state.toValidatedCleanupPlanItemState(),
+      reason: reason,
+    );
+  }
+}
+
+extension CleanupPlanItemRefDomainMapper on CleanupPlanItemRefDto {
+  CleanupPlanItemRef toDomain() {
+    return CleanupPlanItemRef(
+      sessionId: ScanSessionId(sessionId),
+      snapshotId: SnapshotId(snapshotId),
+      nodeId: NodeId(nodeId),
     );
   }
 }
@@ -711,6 +763,22 @@ extension StringDomainMapper on String {
       'unknown_requires_review' =>
         CleanupItemOutcomeState.unknownRequiresReview,
       _ => CleanupItemOutcomeState.unknown,
+    };
+  }
+
+  ValidatedCleanupPlanState toValidatedCleanupPlanState() {
+    return switch (this) {
+      'ready' => ValidatedCleanupPlanState.ready,
+      'blocked' => ValidatedCleanupPlanState.blocked,
+      _ => ValidatedCleanupPlanState.unknown,
+    };
+  }
+
+  ValidatedCleanupPlanItemState toValidatedCleanupPlanItemState() {
+    return switch (this) {
+      'ready' => ValidatedCleanupPlanItemState.ready,
+      'blocked' => ValidatedCleanupPlanItemState.blocked,
+      _ => ValidatedCleanupPlanItemState.unknown,
     };
   }
 
