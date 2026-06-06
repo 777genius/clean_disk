@@ -8,6 +8,7 @@ import 'package:clean_disk_scan/src/application/ports/scan_repository.dart';
 import 'package:clean_disk_scan/src/application/ports/scan_target_catalog.dart';
 import 'package:clean_disk_scan/src/application/ports/scan_target_preference_store.dart';
 import 'package:clean_disk_scan/src/application/use_cases/cancel_scan_use_case.dart';
+import 'package:clean_disk_scan/src/application/use_cases/dispose_scan_use_case.dart';
 import 'package:clean_disk_scan/src/application/use_cases/execute_cleanup_use_case.dart';
 import 'package:clean_disk_scan/src/application/use_cases/get_capabilities_use_case.dart';
 import 'package:clean_disk_scan/src/application/use_cases/get_children_page_use_case.dart';
@@ -624,6 +625,44 @@ void main() {
     expect(store.hasReadableSnapshot, isFalse);
     expect(store.visibleRows, isEmpty);
     expect(store.viewport.isStale, isFalse);
+  });
+
+  test(
+    'disposes previous daemon session before starting replacement scan',
+    () async {
+      final repository = _FakeScanRepository();
+      final eventClient = _FakeScanEventClient();
+      final store = _store(repository, eventClient);
+
+      await store.start(_startCommand());
+      repository.startStatus = Result.success(
+        ScanSessionStatus(
+          sessionId: ScanSessionId('3'),
+          state: SessionState.running,
+          snapshotId: null,
+          rootNodeIds: const [],
+          progress: null,
+        ),
+      );
+
+      await store.start(_startCommand());
+
+      expect(repository.disposeCommands, hasLength(1));
+      expect(repository.disposeCommands.single.sessionId, ScanSessionId('1'));
+      expect(store.sessionId, ScanSessionId('3'));
+    },
+  );
+
+  test('disposes active daemon session when store is disposed', () async {
+    final repository = _FakeScanRepository();
+    final eventClient = _FakeScanEventClient();
+    final store = _store(repository, eventClient);
+
+    await store.start(_startCommand());
+    await store.dispose();
+
+    expect(repository.disposeCommands, hasLength(1));
+    expect(repository.disposeCommands.single.sessionId, ScanSessionId('1'));
   });
 
   test(
@@ -1301,6 +1340,64 @@ void main() {
       await store.dispose();
     },
   );
+
+  test(
+    'refreshes authoritative status when stream sequence has a gap',
+    () async {
+      final repository = _FakeScanRepository();
+      final eventClient = _FakeScanEventClient();
+      final store = _store(repository, eventClient);
+
+      repository.statusResponses.add(
+        Result.success(
+          ScanSessionStatus(
+            sessionId: ScanSessionId('1'),
+            state: SessionState.completed,
+            snapshotId: SnapshotId('9'),
+            rootNodeIds: [NodeId('1')],
+            progress: ScanProgress(scannedItems: BigInt.from(200)),
+          ),
+        ),
+      );
+
+      await store.connectEvents();
+      await store.start(_startCommand());
+      eventClient.add(
+        Result.success(
+          ScanEventEnvelope(
+            protocolVersion: ProtocolVersion.current,
+            sequence: EventSequence('1'),
+            emittedAtUnixMs: BigInt.from(1),
+            event: ScanProgressed(
+              sessionId: ScanSessionId('1'),
+              progress: ScanProgress(scannedItems: BigInt.from(100)),
+            ),
+          ),
+        ),
+      );
+      eventClient.add(
+        Result.success(
+          ScanEventEnvelope(
+            protocolVersion: ProtocolVersion.current,
+            sequence: EventSequence('3'),
+            emittedAtUnixMs: BigInt.from(3),
+            event: ScanProgressed(
+              sessionId: ScanSessionId('1'),
+              progress: ScanProgress(scannedItems: BigInt.from(150)),
+            ),
+          ),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(repository.statusRequestCount, 1);
+      expect(store.sessionStatus?.state, SessionState.completed);
+      expect(store.activeSnapshotId, SnapshotId('9'));
+
+      await store.dispose();
+    },
+  );
 }
 
 ScanWorkspaceStore _store(
@@ -1329,6 +1426,7 @@ ScanWorkspaceStore _store(
     revealPath: pathRevealer == null ? null : RevealPathUseCase(pathRevealer),
     startScan: StartScanUseCase(repository),
     cancelScan: CancelScanUseCase(repository),
+    disposeScan: DisposeScanUseCase(repository),
     getScanStatus: GetScanStatusUseCase(repository),
     getChildrenPage: GetChildrenPageUseCase(repository),
     searchNodes: SearchNodesUseCase(repository),
@@ -1549,6 +1647,7 @@ final class _FakeScanRepository implements ScanRepository {
   final List<TopItemsQuery> topItemsQueries = [];
   final List<ScanTarget> permissionProbeTargets = [];
   final List<ExecuteCleanupCommand> cleanupCommands = [];
+  final List<SessionCommand> disposeCommands = [];
   Result<CleanupRecoveryInbox> recoveryInbox = const Result.success(
     CleanupRecoveryInbox(interruptedReceipts: []),
   );
@@ -1595,6 +1694,7 @@ final class _FakeScanRepository implements ScanRepository {
 
   @override
   Future<Result<Unit>> disposeScan(SessionCommand command) async {
+    disposeCommands.add(command);
     return const Result.success(Unit.value);
   }
 

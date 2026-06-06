@@ -1,10 +1,11 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:js_interop';
 
 import 'package:clean_disk_core/clean_disk_core.dart';
 import 'package:clean_disk_network/clean_disk_network.dart';
 import 'package:clean_disk_scan/clean_disk_scan.dart';
 import 'package:clean_disk_scan/clean_disk_scan_data.dart';
+import 'package:web/web.dart' as web;
 
 import 'deferred_http_client.dart';
 import 'path_revealer.dart';
@@ -21,6 +22,8 @@ const _localAuthToken = String.fromEnvironment(
   'CLEAN_DISK_LOCAL_AUTH_TOKEN',
   defaultValue: '',
 );
+const _eventsWebSocketSubprotocol = 'clean-disk-events-v1';
+const _eventsWebSocketTokenPrefix = 'clean-disk-token.';
 
 ScanModule createDaemonScanModule(ScanWorkspaceConfig config) {
   final environment = AppEnvironment.fromValues(
@@ -75,19 +78,41 @@ ScanModule createDaemonScanModule(ScanWorkspaceConfig config) {
 Stream<Object?> _watchDaemonEvents({
   required Uri baseUri,
   required String? localAuthToken,
-}) async* {
-  final socket = await WebSocket.connect(
-    _eventsUri(baseUri).toString(),
-    headers: _eventHeaders(localAuthToken),
-    protocols: const ['clean-disk-events-v1'],
+}) {
+  late StreamController<Object?> controller;
+  web.WebSocket? socket;
+
+  controller = StreamController<Object?>(
+    onListen: () {
+      socket = web.WebSocket(
+        _eventsUri(baseUri).toString(),
+        _eventProtocols(localAuthToken).jsify()!,
+      );
+      socket!.onmessage = ((web.Event event) {
+        final message = event as web.MessageEvent;
+        controller.add(message.data.dartify());
+      }).toJS;
+      socket!.onerror = ((web.Event _) {
+        controller.addError(StateError('Scan event stream disconnected'));
+      }).toJS;
+      socket!.onclose = ((web.Event _) {
+        controller.addError(StateError('Scan event stream disconnected'));
+        unawaited(controller.close());
+      }).toJS;
+    },
+    onCancel: () {
+      final activeSocket = socket;
+      if (activeSocket != null) {
+        activeSocket.onmessage = null;
+        activeSocket.onerror = null;
+        activeSocket.onclose = null;
+        activeSocket.close();
+      }
+      socket = null;
+    },
   );
-  try {
-    await for (final event in socket) {
-      yield event;
-    }
-  } finally {
-    await socket.close();
-  }
+
+  return controller.stream;
 }
 
 Uri _eventsUri(Uri baseUri) {
@@ -102,11 +127,12 @@ Uri _eventsUri(Uri baseUri) {
   );
 }
 
-Map<String, String>? _eventHeaders(String? localAuthToken) {
-  if (localAuthToken == null) {
-    return null;
+List<String> _eventProtocols(String? localAuthToken) {
+  final token = localAuthToken?.trim();
+  if (token == null || token.isEmpty) {
+    return const [_eventsWebSocketSubprotocol];
   }
-  return {'authorization': 'Bearer $localAuthToken'};
+  return [_eventsWebSocketSubprotocol, '$_eventsWebSocketTokenPrefix$token'];
 }
 
 String? _normalizedAuthToken() {

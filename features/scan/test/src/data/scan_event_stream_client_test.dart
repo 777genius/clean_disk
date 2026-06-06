@@ -53,4 +53,34 @@ void main() {
     expect(events.first, isA<ResultFailure<ScanEventEnvelope>>());
     expect(events.last, isA<ResultFailure<ScanEventEnvelope>>());
   });
+
+  test(
+    'reconnects connectable streams before reporting disconnection',
+    () async {
+      var connectCount = 0;
+      final client = ScanEventStreamClient(
+        connect: () {
+          connectCount += 1;
+          if (connectCount == 1) {
+            return Stream<Object?>.error(StateError('socket closed'));
+          }
+          return Stream<Object?>.fromIterable([
+            jsonEncode({
+              'protocolVersion': {'major': 0, 'minor': 1},
+              'sequence': '2',
+              'emittedAtUnixMs': '1710000000001',
+              'event': {'type': 'started', 'sessionId': '42'},
+            }),
+          ]);
+        },
+        reconnectDelays: const [Duration.zero],
+      );
+
+      final events = await client.watchEvents().take(1).toList();
+
+      expect(connectCount, 2);
+      expect(events, hasLength(1));
+      expect(events.single, isA<ResultSuccess<ScanEventEnvelope>>());
+    },
+  );
 }

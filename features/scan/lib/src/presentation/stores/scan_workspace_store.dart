@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:clean_disk_core/clean_disk_core.dart';
 import 'package:clean_disk_scan/src/application/ports/scan_target_catalog.dart';
 import 'package:clean_disk_scan/src/application/use_cases/cancel_scan_use_case.dart';
+import 'package:clean_disk_scan/src/application/use_cases/dispose_scan_use_case.dart';
 import 'package:clean_disk_scan/src/application/use_cases/execute_cleanup_use_case.dart';
 import 'package:clean_disk_scan/src/application/use_cases/get_capabilities_use_case.dart';
 import 'package:clean_disk_scan/src/application/use_cases/get_children_page_use_case.dart';
@@ -127,6 +128,7 @@ final class ScanWorkspaceStore with Store {
     RevealPathUseCase? revealPath,
     required StartScanUseCase startScan,
     required CancelScanUseCase cancelScan,
+    required DisposeScanUseCase disposeScan,
     required GetScanStatusUseCase getScanStatus,
     required GetChildrenPageUseCase getChildrenPage,
     required SearchNodesUseCase searchNodes,
@@ -145,6 +147,7 @@ final class ScanWorkspaceStore with Store {
        _revealPath = revealPath,
        _startScan = startScan,
        _cancelScan = cancelScan,
+       _disposeScan = disposeScan,
        _getScanStatus = getScanStatus,
        _getChildrenPage = getChildrenPage,
        _searchNodes = searchNodes,
@@ -164,6 +167,7 @@ final class ScanWorkspaceStore with Store {
   final RevealPathUseCase? _revealPath;
   final StartScanUseCase _startScan;
   final CancelScanUseCase _cancelScan;
+  final DisposeScanUseCase _disposeScan;
   final GetScanStatusUseCase _getScanStatus;
   final GetChildrenPageUseCase _getChildrenPage;
   final SearchNodesUseCase _searchNodes;
@@ -225,6 +229,7 @@ final class ScanWorkspaceStore with Store {
   );
 
   StreamSubscription<Result<ScanEventEnvelope>>? _eventSubscription;
+  EventSequence? _lastEventSequence;
   void Function()? _onChanged;
   var _searchRequestGeneration = 0;
 
@@ -621,6 +626,8 @@ final class ScanWorkspaceStore with Store {
 
   Future<void> start(StartScanCommand command) async {
     _setPageLoading();
+    await _disposeCurrentSession(command.commandId);
+    _lastEventSequence = null;
     runInAction(() {
       final currentViewport = viewport;
       _activeSnapshotId.value = null;
@@ -1164,7 +1171,10 @@ final class ScanWorkspaceStore with Store {
 
   Future<void> connectEvents() async {
     await _eventSubscription?.cancel();
-    _eventSubscription = _watchScanEvents().listen(_applyEventResult);
+    _lastEventSequence = null;
+    _eventSubscription = _watchScanEvents().listen((result) {
+      unawaited(_applyEventResult(result));
+    });
   }
 
   void reconcileEvent(ScanEventEnvelope envelope) {
@@ -1248,12 +1258,17 @@ final class ScanWorkspaceStore with Store {
   Future<void> dispose() async {
     await _eventSubscription?.cancel();
     _eventSubscription = null;
+    await _disposeCurrentSession(_nextInternalCommandId());
   }
 
-  void _applyEventResult(Result<ScanEventEnvelope> result) {
+  Future<void> _applyEventResult(Result<ScanEventEnvelope> result) async {
     switch (result) {
       case ResultSuccess(:final value):
+        final missedEvents = _recordEventSequence(value.sequence);
         reconcileEvent(value);
+        if (missedEvents) {
+          await refreshStatus();
+        }
       case ResultFailure(:final failure):
         runInAction(() {
           _daemonAvailability.value = ScanDaemonAvailability.offline;
@@ -1261,6 +1276,37 @@ final class ScanWorkspaceStore with Store {
         });
     }
     _notifyChanged();
+  }
+
+  Future<void> _disposeCurrentSession(CommandId commandId) async {
+    final currentSessionId = sessionId;
+    if (currentSessionId == null) {
+      return;
+    }
+
+    final result = await _disposeScan(
+      SessionCommand(commandId: commandId, sessionId: currentSessionId),
+    );
+    if (result case ResultFailure<Unit>(:final failure)) {
+      runInAction(() {
+        _lastFailure.value = failure;
+      });
+      _notifyChanged();
+    }
+  }
+
+  CommandId _nextInternalCommandId() {
+    return CommandId(DateTime.now().microsecondsSinceEpoch.toString());
+  }
+
+  bool _recordEventSequence(EventSequence sequence) {
+    final current = sequence.toBigInt();
+    final previous = _lastEventSequence?.toBigInt();
+    if (previous != null && current <= previous) {
+      return false;
+    }
+    _lastEventSequence = sequence;
+    return previous != null && current > previous + BigInt.one;
   }
 
   void _applyTreeRootPage(
@@ -1510,6 +1556,7 @@ final class ScanWorkspaceStore with Store {
   void _clearReadModelState() {
     final currentViewport = viewport;
     _sessionStatus.value = null;
+    _lastEventSequence = null;
     _progress.value = null;
     _activeSnapshotId.value = null;
     _pageLoadState.value = ScanPageLoadState.idle;

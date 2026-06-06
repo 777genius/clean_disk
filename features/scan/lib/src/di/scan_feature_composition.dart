@@ -127,6 +127,7 @@ final class ScanUseCaseBundle {
       revealPath: revealPath,
       startScan: startScan,
       cancelScan: cancelScan,
+      disposeScan: disposeScan,
       getScanStatus: getScanStatus,
       getChildrenPage: getChildrenPage,
       searchNodes: searchNodes,

@@ -5,7 +5,8 @@ import 'default_scan_target_path.dart';
 import 'path_revealer.dart';
 import 'permission_repair_launcher.dart';
 import 'scan_module_factory_daemon_stub.dart'
-    if (dart.library.io) 'scan_module_factory_daemon_io.dart';
+    if (dart.library.io) 'scan_module_factory_daemon_io.dart'
+    if (dart.library.html) 'scan_module_factory_daemon_web.dart';
 import 'scan_target_catalog.dart';
 import 'scan_target_picker.dart';
 import 'scan_target_preferences.dart';

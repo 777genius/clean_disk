@@ -66,7 +66,7 @@ class _ScanHomePageState extends State<ScanHomePage> {
     _searchFocusNode.dispose();
     _searchController.dispose();
     widget.store.setChangeListener(null);
-    widget.store.dispose();
+    unawaited(widget.store.dispose());
     super.dispose();
   }
 
