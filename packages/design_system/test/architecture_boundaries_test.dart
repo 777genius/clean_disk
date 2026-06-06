@@ -12,6 +12,7 @@ void main() {
       'package:mobx',
       'package:drift',
       'package:dio',
+      'package:syncfusion',
     ]);
   });
 }
