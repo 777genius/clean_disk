@@ -65,6 +65,31 @@ final class LocalScanTargetCatalog implements ScanTargetCatalog {
             ),
           );
         }
+        final library = _joinPath(home, 'Library');
+        if (_directoryExists(library)) {
+          choices.add(
+            _choice(
+              id: 'library',
+              kind: ScanTargetChoiceKind.library,
+              path: library,
+              scope: TargetScope.localPath,
+              displayName: 'Library',
+            ),
+          );
+        }
+      }
+
+      const applications = '/Applications';
+      if (_isMacOS && _directoryExists(applications)) {
+        choices.add(
+          _choice(
+            id: 'applications',
+            kind: ScanTargetChoiceKind.applications,
+            path: applications,
+            scope: TargetScope.localPath,
+            displayName: 'Applications',
+          ),
+        );
       }
 
       final rootPath = _rootPath();

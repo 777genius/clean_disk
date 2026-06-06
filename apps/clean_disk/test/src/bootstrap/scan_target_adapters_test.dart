@@ -59,6 +59,8 @@ void main() {
         directoryExists: const {
           '/Users/belief',
           '/Users/belief/Downloads',
+          '/Users/belief/Library',
+          '/Applications',
           '/',
         }.contains,
         volumePaths: () => const ['/Volumes/Data', '/Volumes/Data'],
@@ -70,12 +72,16 @@ void main() {
       expect(choices.map((choice) => choice.target.path.value), [
         '/Users/belief',
         '/Users/belief/Downloads',
+        '/Users/belief/Library',
+        '/Applications',
         '/',
         '/Volumes/Data',
       ]);
       expect(choices.map((choice) => choice.displayName), [
         'Home',
         'Downloads',
+        'Library',
+        'Applications',
         '/',
         'Data',
       ]);
