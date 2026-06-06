@@ -15,3 +15,10 @@ coverage/
 !.env.example
 !AGENTS.md
 !README.md
+
+# Local agent and browser verification artifacts.
+.codex/
+.serena/
+.playwright-mcp/
+clean-disk-wide-*-smoke.png
+clean-disk-wide-smoke.png
