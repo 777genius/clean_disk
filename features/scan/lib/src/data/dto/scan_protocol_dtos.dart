@@ -1,7 +1,7 @@
 final class ProtocolVersionDto {
   const ProtocolVersionDto({required this.major, required this.minor});
 
-  static const current = ProtocolVersionDto(major: 0, minor: 4);
+  static const current = ProtocolVersionDto(major: 0, minor: 5);
 
   final int major;
   final int minor;
@@ -123,26 +123,6 @@ final class CleanupPlanItemRefDto {
       snapshotId: _decimalField(json, 'snapshotId'),
       nodeId: _decimalField(json, 'nodeId'),
     );
-  }
-}
-
-final class ExecuteCleanupRequestDto {
-  const ExecuteCleanupRequestDto({
-    required this.protocolVersion,
-    required this.commandId,
-    required this.items,
-  });
-
-  final ProtocolVersionDto protocolVersion;
-  final String commandId;
-  final List<CleanupPlanItemRefDto> items;
-
-  Map<String, Object?> toJson() {
-    return {
-      'protocolVersion': protocolVersion.toJson(),
-      'commandId': commandId,
-      'items': items.map((item) => item.toJson()).toList(),
-    };
   }
 }
 

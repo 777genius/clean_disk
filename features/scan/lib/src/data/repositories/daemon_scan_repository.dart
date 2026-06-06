@@ -131,19 +131,6 @@ final class DaemonScanRepository implements ScanRepository {
   }
 
   @override
-  Future<Result<CleanupReceipt>> executeCleanup(ExecuteCleanupCommand command) {
-    return _guard(() async {
-      final plan = await _apiClient.createCleanupPlan(
-        command.toCreateCleanupPlanDto(),
-      );
-      final dto = await _apiClient.executeCleanupPlan(
-        command.toExecuteCleanupPlanDto(plan.planId),
-      );
-      return dto.toDomain();
-    });
-  }
-
-  @override
   Future<Result<CleanupRecoveryInbox>> getCleanupRecoveryInbox() {
     return _guard(() async {
       final dto = await _apiClient.getCleanupRecoveryInbox();

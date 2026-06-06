@@ -23,32 +23,6 @@ extension SessionCommandDtoMapper on SessionCommand {
   }
 }
 
-extension ExecuteCleanupCommandDtoMapper on ExecuteCleanupCommand {
-  ExecuteCleanupRequestDto toDto() {
-    return ExecuteCleanupRequestDto(
-      protocolVersion: ProtocolVersionDto.current,
-      commandId: commandId.value,
-      items: items.map((item) => item.toDto()).toList(),
-    );
-  }
-
-  CreateCleanupPlanRequestDto toCreateCleanupPlanDto() {
-    return CreateCleanupPlanRequestDto(
-      protocolVersion: ProtocolVersionDto.current,
-      commandId: commandId.value,
-      items: items.map((item) => item.toDto()).toList(),
-    );
-  }
-
-  ExecuteCleanupPlanRequestDto toExecuteCleanupPlanDto(String planId) {
-    return ExecuteCleanupPlanRequestDto(
-      protocolVersion: ProtocolVersionDto.current,
-      commandId: commandId.value,
-      planId: planId,
-    );
-  }
-}
-
 extension CreateCleanupPlanCommandDtoMapper on CreateCleanupPlanCommand {
   CreateCleanupPlanRequestDto toDto() {
     return CreateCleanupPlanRequestDto(

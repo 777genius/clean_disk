@@ -1,7 +1,7 @@
 final class ProtocolVersion {
   const ProtocolVersion({required this.major, required this.minor});
 
-  static const current = ProtocolVersion(major: 0, minor: 4);
+  static const current = ProtocolVersion(major: 0, minor: 5);
 
   final int major;
   final int minor;
@@ -644,13 +644,6 @@ final class CleanupPlanItemRef {
   final ScanSessionId sessionId;
   final SnapshotId snapshotId;
   final NodeId nodeId;
-}
-
-final class ExecuteCleanupCommand {
-  const ExecuteCleanupCommand({required this.commandId, required this.items});
-
-  final CommandId commandId;
-  final List<CleanupPlanItemRef> items;
 }
 
 final class CreateCleanupPlanCommand {

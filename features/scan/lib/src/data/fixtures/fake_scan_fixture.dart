@@ -429,31 +429,6 @@ final class FakeScanRepository implements ScanRepository {
   }
 
   @override
-  Future<Result<CleanupReceipt>> executeCleanup(
-    ExecuteCleanupCommand command,
-  ) async {
-    final receipt = CleanupReceipt(
-      operationId: command.commandId,
-      commandId: command.commandId,
-      state: CleanupReceiptState.completed,
-      lowDiskReserveReady: true,
-      items: command.items
-          .map(
-            (item) => CleanupReceiptItem(
-              nodeId: item.nodeId,
-              displayName: _nodes[item.nodeId]?.name ?? item.nodeId.value,
-              state: CleanupItemOutcomeState.movedToTrash,
-              restoreExpectation: RestoreExpectationLevel.platformTrashManual,
-              reason: null,
-            ),
-          )
-          .toList(),
-    );
-    lastCleanupReceipt = receipt;
-    return Result.success(receipt);
-  }
-
-  @override
   Future<Result<CleanupRecoveryInbox>> getCleanupRecoveryInbox() async {
     return const Result.success(CleanupRecoveryInbox(interruptedReceipts: []));
   }

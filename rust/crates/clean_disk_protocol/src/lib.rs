@@ -23,7 +23,7 @@ pub use cleanup::{
     CleanupItemOutcomeStateDto, CleanupPlanDto, CleanupPlanItemDto, CleanupPlanItemRefDto,
     CleanupPlanItemStateDto, CleanupPlanStateDto, CleanupReceiptDto, CleanupReceiptItemDto,
     CleanupReceiptStateDto, CleanupRecoveryInboxDto, CreateCleanupPlanRequestDto,
-    ExecuteCleanupPlanRequestDto, ExecuteCleanupRequestDto, RestoreExpectationLevelDto,
+    ExecuteCleanupPlanRequestDto, RestoreExpectationLevelDto,
 };
 pub use diagnostics::DaemonDiagnosticsDto;
 pub use event::{EventSequenceDto, ScanEventDto, ScanEventEnvelopeDto};

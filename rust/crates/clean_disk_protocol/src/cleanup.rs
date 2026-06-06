@@ -253,40 +253,6 @@ impl ExecuteCleanupPlanRequestDto {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ExecuteCleanupRequestDto {
-    protocol_version: ProtocolVersionDto,
-    command_id: DecimalU128Dto,
-    items: Vec<CleanupPlanItemRefDto>,
-}
-
-impl ExecuteCleanupRequestDto {
-    pub fn new(
-        protocol_version: ProtocolVersionDto,
-        command_id: DecimalU128Dto,
-        items: Vec<CleanupPlanItemRefDto>,
-    ) -> Self {
-        Self {
-            protocol_version,
-            command_id,
-            items,
-        }
-    }
-
-    pub const fn protocol_version(&self) -> ProtocolVersionDto {
-        self.protocol_version
-    }
-
-    pub const fn command_id(&self) -> &DecimalU128Dto {
-        &self.command_id
-    }
-
-    pub fn items(&self) -> &[CleanupPlanItemRefDto] {
-        &self.items
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CleanupReceiptItemDto {
     node_id: DecimalU64Dto,
     display_name: String,

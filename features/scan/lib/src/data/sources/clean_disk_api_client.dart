@@ -104,14 +104,6 @@ final class CleanDiskApiClient {
     );
   }
 
-  Future<CleanupReceiptDto> executeCleanup(ExecuteCleanupRequestDto request) {
-    return _postDto(
-      '/v1/cleanup/execute',
-      request.toJson(),
-      CleanupReceiptDto.fromJson,
-    );
-  }
-
   Future<CleanupPlanDto> createCleanupPlan(
     CreateCleanupPlanRequestDto request,
   ) {

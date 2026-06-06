@@ -1214,7 +1214,6 @@ void main() {
       repository.cleanupPlanExecuteCommands.single.planId,
       CleanupPlanId('55'),
     );
-    expect(repository.cleanupCommands, isEmpty);
     expect(store.cleanupReceipt?.state, CleanupReceiptState.completed);
     expect(
       store.cleanupReceipt?.items.single.state,
@@ -1754,7 +1753,6 @@ final class _FakeScanRepository implements ScanRepository {
   final List<ScanTarget> permissionProbeTargets = [];
   final List<CreateCleanupPlanCommand> cleanupPlanCommands = [];
   final List<ExecuteCleanupPlanCommand> cleanupPlanExecuteCommands = [];
-  final List<ExecuteCleanupCommand> cleanupCommands = [];
   final List<SessionCommand> disposeCommands = [];
   final Map<CleanupPlanId, List<CleanupPlanItemRef>> cleanupPlanItemsById = {};
   Result<ValidatedCleanupPlan>? cleanupPlanResult;
@@ -1906,32 +1904,6 @@ final class _FakeScanRepository implements ScanRepository {
               ),
             )
             .toList(growable: false),
-      ),
-    );
-  }
-
-  @override
-  Future<Result<CleanupReceipt>> executeCleanup(
-    ExecuteCleanupCommand command,
-  ) async {
-    cleanupCommands.add(command);
-    return Result.success(
-      CleanupReceipt(
-        operationId: command.commandId,
-        commandId: command.commandId,
-        state: CleanupReceiptState.completed,
-        lowDiskReserveReady: true,
-        items: command.items
-            .map(
-              (item) => CleanupReceiptItem(
-                nodeId: item.nodeId,
-                displayName: item.nodeId.value,
-                state: CleanupItemOutcomeState.movedToTrash,
-                restoreExpectation: RestoreExpectationLevel.platformTrashManual,
-                reason: null,
-              ),
-            )
-            .toList(),
       ),
     );
   }

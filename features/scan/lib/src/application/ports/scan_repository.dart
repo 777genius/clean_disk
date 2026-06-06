@@ -32,7 +32,5 @@ abstract interface class ScanRepository {
     ExecuteCleanupPlanCommand command,
   );
 
-  Future<Result<CleanupReceipt>> executeCleanup(ExecuteCleanupCommand command);
-
   Future<Result<CleanupRecoveryInbox>> getCleanupRecoveryInbox();
 }

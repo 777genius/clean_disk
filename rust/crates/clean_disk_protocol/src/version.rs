@@ -28,6 +28,6 @@ impl ProtocolVersionDto {
     }
 }
 
-pub const PROTOCOL_VERSION: ProtocolVersionDto = ProtocolVersionDto::new(0, 4);
+pub const PROTOCOL_VERSION: ProtocolVersionDto = ProtocolVersionDto::new(0, 5);
 
 pub type ProtocolVersion = ProtocolVersionDto;

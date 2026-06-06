@@ -20,7 +20,7 @@ void main() {
     ).toDto();
 
     expect(dto.toJson(), {
-      'protocolVersion': {'major': 0, 'minor': 4},
+      'protocolVersion': {'major': 0, 'minor': 5},
       'commandId': '99',
       'targets': [
         {
@@ -44,7 +44,7 @@ void main() {
     ).toPermissionProbeRequestDto();
 
     expect(dto.toJson(), {
-      'protocolVersion': {'major': 0, 'minor': 4},
+      'protocolVersion': {'major': 0, 'minor': 5},
       'target': {
         'path': '/tmp/clean-disk-fixture',
         'scope': 'local_path',
@@ -73,7 +73,7 @@ void main() {
 
   test('maps capability runtime proof without trusting unknown access', () {
     final dto = CapabilityResponseDto.fromJson({
-      'protocolVersion': {'major': 0, 'minor': 4},
+      'protocolVersion': {'major': 0, 'minor': 5},
       'scanner': {
         'backendName': 'pdu',
         'capabilities': {

@@ -1,9 +1,9 @@
 use crate::{
     CancelScanRequestDto, CapabilityResponseDto, ChildrenPageRequestDto, CleanupPlanDto,
     CleanupReceiptDto, CleanupRecoveryInboxDto, CreateCleanupPlanRequestDto, DaemonDiagnosticsDto,
-    DisposeScanSessionRequestDto, ExecuteCleanupPlanRequestDto, ExecuteCleanupRequestDto,
-    NodeDetailsRequestDto, NodeDetailsResponseDto, NodePageResponseDto, ScanEventEnvelopeDto,
-    ScanSessionStatusDto, SearchPageRequestDto, StartScanRequestDto, TopItemsRequestDto,
+    DisposeScanSessionRequestDto, ExecuteCleanupPlanRequestDto, NodeDetailsRequestDto,
+    NodeDetailsResponseDto, NodePageResponseDto, ScanEventEnvelopeDto, ScanSessionStatusDto,
+    SearchPageRequestDto, StartScanRequestDto, TopItemsRequestDto,
 };
 use schemars::{JsonSchema, Schema, schema_for};
 use serde::{Deserialize, Serialize};
@@ -27,7 +27,6 @@ pub struct ProtocolSchemaRootDto {
     create_cleanup_plan_request: CreateCleanupPlanRequestDto,
     execute_cleanup_plan_request: ExecuteCleanupPlanRequestDto,
     cleanup_plan: CleanupPlanDto,
-    execute_cleanup_request: ExecuteCleanupRequestDto,
     cleanup_receipt: CleanupReceiptDto,
     cleanup_recovery_inbox: CleanupRecoveryInboxDto,
 }

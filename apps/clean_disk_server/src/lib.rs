@@ -14,18 +14,18 @@ use clean_disk_protocol::{
     CleanupPlanStateDto, CleanupReceiptDto, CleanupReceiptItemDto, CleanupReceiptStateDto,
     CleanupRecoveryInboxDto, CreateCleanupPlanRequestDto, DaemonDiagnosticsDto, DecimalU64Dto,
     DecimalU128Dto, DecimalUsizeDto, DisplayPathDto, DisposeScanSessionRequestDto,
-    DistributionChannelDto, ExecuteCleanupPlanRequestDto, ExecuteCleanupRequestDto,
-    HardlinkPolicyDto, IssueCodeDto, IssueEvidenceDto, IssueSeverityDto, MeasuredQuantityDto,
-    MeasuredQuantityResponseDto, NodeDetailsRequestDto, NodeDetailsResponseDto, NodeFlagsDto,
-    NodeKindDto, NodePageItemDto, NodePageResponseDto, NodeTimestampsDto, OpaqueCursorDto,
-    PROTOCOL_VERSION, PackageModeDto, PackagingProofDto, PackagingProofDtoParts, PathPrivacyDto,
-    PermissionProbeDto, PermissionProbeRequestDto, PermissionProbeStatusDto,
-    PermissionRequiredActionDto, ProtocolLimitDto, RawPathDto, RestoreExpectationLevelDto,
-    RuntimePlatformDto, RuntimeProofDto, ScanEventDto, ScanEventEnvelopeDto, ScanIssueDto,
-    ScanProgressDto, ScanSessionStatusDto, ScanTargetDto, ScannerCapabilityDto,
-    ScannerIdentityProofDto, ScannerIdentityVerificationDto, ScannerProcessKindDto,
-    SearchPageRequestDto, SessionStateDto, SizeConfidenceDto, SizeFactDto, StartScanRequestDto,
-    SupportLevelDto, TargetScopeDto, TopItemsKindDto, TopItemsRequestDto, UpdateSafetyDto,
+    DistributionChannelDto, ExecuteCleanupPlanRequestDto, HardlinkPolicyDto, IssueCodeDto,
+    IssueEvidenceDto, IssueSeverityDto, MeasuredQuantityDto, MeasuredQuantityResponseDto,
+    NodeDetailsRequestDto, NodeDetailsResponseDto, NodeFlagsDto, NodeKindDto, NodePageItemDto,
+    NodePageResponseDto, NodeTimestampsDto, OpaqueCursorDto, PROTOCOL_VERSION, PackageModeDto,
+    PackagingProofDto, PackagingProofDtoParts, PathPrivacyDto, PermissionProbeDto,
+    PermissionProbeRequestDto, PermissionProbeStatusDto, PermissionRequiredActionDto,
+    ProtocolLimitDto, RawPathDto, RestoreExpectationLevelDto, RuntimePlatformDto, RuntimeProofDto,
+    ScanEventDto, ScanEventEnvelopeDto, ScanIssueDto, ScanProgressDto, ScanSessionStatusDto,
+    ScanTargetDto, ScannerCapabilityDto, ScannerIdentityProofDto, ScannerIdentityVerificationDto,
+    ScannerProcessKindDto, SearchPageRequestDto, SessionStateDto, SizeConfidenceDto, SizeFactDto,
+    StartScanRequestDto, SupportLevelDto, TargetScopeDto, TopItemsKindDto, TopItemsRequestDto,
+    UpdateSafetyDto,
 };
 use fs_usage_core::{
     BoundaryPolicy, ChildCompleteness, EvidenceConfidence, HardlinkPolicy, IssueCode,
@@ -331,7 +331,6 @@ pub fn build_router(state: AppState) -> Router {
             "/v1/cleanup/plans/{plan_id}/execute",
             post(execute_cleanup_plan),
         )
-        .route("/v1/cleanup/execute", post(execute_cleanup))
         .route(
             "/v1/cleanup/recovery-inbox",
             get(get_cleanup_recovery_inbox),
@@ -704,10 +703,25 @@ struct CleanupPreflight {
 
 #[derive(Debug, Default)]
 struct CleanupExecutionLocks {
+    active_commands: Mutex<HashSet<u128>>,
     active_paths: Mutex<Vec<PathBuf>>,
 }
 
 impl CleanupExecutionLocks {
+    fn try_acquire_command(self: &Arc<Self>, command_id: u128) -> Result<CleanupCommandGuard, ()> {
+        let mut active_commands = self
+            .active_commands
+            .lock()
+            .expect("cleanup command locks poisoned");
+        if !active_commands.insert(command_id) {
+            return Err(());
+        }
+        Ok(CleanupCommandGuard {
+            locks: Arc::clone(self),
+            command_id,
+        })
+    }
+
     fn try_acquire(self: &Arc<Self>, paths: Vec<PathBuf>) -> Result<CleanupExecutionGuard, ()> {
         let mut active_paths = self.active_paths.lock().expect("cleanup locks poisoned");
         if paths.iter().any(|path| {
@@ -722,6 +736,22 @@ impl CleanupExecutionLocks {
             locks: Arc::clone(self),
             paths,
         })
+    }
+}
+
+#[derive(Debug)]
+struct CleanupCommandGuard {
+    locks: Arc<CleanupExecutionLocks>,
+    command_id: u128,
+}
+
+impl Drop for CleanupCommandGuard {
+    fn drop(&mut self) {
+        self.locks
+            .active_commands
+            .lock()
+            .expect("cleanup command locks poisoned")
+            .remove(&self.command_id);
     }
 }
 
@@ -777,6 +807,16 @@ impl CleanupPlanStore {
             };
             plans.remove(&oldest);
         }
+    }
+
+    fn take(&self, plan_id: u128) -> Option<CleanupPlanRecord> {
+        let mut order = self.order.lock().expect("cleanup plan order poisoned");
+        let mut plans = self.plans.lock().expect("cleanup plans poisoned");
+        let plan = plans.remove(&plan_id);
+        if plan.is_some() {
+            order.retain(|stored_plan_id| *stored_plan_id != plan_id);
+        }
+        plan
     }
 
     fn get(&self, plan_id: u128) -> Option<CleanupPlanRecord> {
@@ -1641,6 +1681,29 @@ async fn execute_cleanup_plan(
         );
     }
 
+    let _command_guard = match state.cleanup_locks().try_acquire_command(command_id) {
+        Ok(guard) => guard,
+        Err(()) => {
+            return error_response(
+                StatusCode::CONFLICT,
+                "active_cleanup_command",
+                "cleanup command is already running",
+            );
+        }
+    };
+
+    match state.cleanup_journal().receipt_for_command(command_id) {
+        Ok(Some(receipt)) => return Json(receipt).into_response(),
+        Ok(None) => {}
+        Err(_) => {
+            return error_response(
+                StatusCode::INSUFFICIENT_STORAGE,
+                "cleanup_journal_unavailable",
+                "cleanup journal cannot be read",
+            );
+        }
+    }
+
     let Some(plan) = state.cleanup_plans().get(plan_id) else {
         return error_response(
             StatusCode::NOT_FOUND,
@@ -1649,41 +1712,19 @@ async fn execute_cleanup_plan(
         );
     };
 
-    execute_cleanup_record_blocking(state, command_id, plan).await
-}
-
-async fn execute_cleanup(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(request): Json<ExecuteCleanupRequestDto>,
-) -> Response {
-    if let Err(status) = authorize(&state, &headers) {
-        return status.into_response();
-    }
-
-    let command_id = match validate_cleanup_plan_request(
-        request.protocol_version(),
-        request.command_id(),
-        request.items(),
-    ) {
-        Ok(command_id) => command_id,
-        Err(response) => return *response,
-    };
-    let plan = match build_cleanup_plan_record(&state, 0, command_id, request.items()) {
-        Ok(plan) => plan,
-        Err(response) => return *response,
-    };
-
-    execute_cleanup_record_blocking(state, command_id, plan).await
+    execute_cleanup_record_blocking(state, command_id, plan_id, plan).await
 }
 
 async fn execute_cleanup_record_blocking(
     state: AppState,
     command_id: u128,
+    plan_id: u128,
     plan: CleanupPlanRecord,
 ) -> Response {
-    match tokio::task::spawn_blocking(move || execute_cleanup_record(&state, command_id, &plan))
-        .await
+    match tokio::task::spawn_blocking(move || {
+        execute_cleanup_record(&state, command_id, plan_id, plan)
+    })
+    .await
     {
         Ok(response) => response,
         Err(_) => error_response(
@@ -1697,7 +1738,8 @@ async fn execute_cleanup_record_blocking(
 fn execute_cleanup_record(
     state: &AppState,
     command_id: u128,
-    plan: &CleanupPlanRecord,
+    plan_id: u128,
+    plan_preview: CleanupPlanRecord,
 ) -> Response {
     let operation_id = command_id.to_string();
     let command_id_wire = command_id.to_string();
@@ -1714,7 +1756,7 @@ fn execute_cleanup_record(
         }
     }
 
-    let lock_paths = plan
+    let lock_paths = plan_preview
         .preflights
         .values()
         .filter_map(|preflight| {
@@ -1741,6 +1783,13 @@ fn execute_cleanup_record(
     if let Err(error) = journal.ensure_ready() {
         return cleanup_journal_error_response(error);
     }
+    let Some(plan) = state.cleanup_plans().take(plan_id) else {
+        return error_response(
+            StatusCode::NOT_FOUND,
+            "cleanup_plan_not_found",
+            "cleanup plan was not found",
+        );
+    };
 
     let now = now_unix_ms();
     let refs = plan
@@ -3397,6 +3446,49 @@ mod tests {
             .expect("request")
     }
 
+    fn cleanup_item_ref(
+        session_id: u128,
+        snapshot_id: u128,
+        node_id: u64,
+    ) -> CleanupPlanItemRefDto {
+        CleanupPlanItemRefDto::new(
+            DecimalU128Dto::from_u128(session_id),
+            DecimalU128Dto::from_u128(snapshot_id),
+            DecimalU64Dto::from_u64(node_id),
+        )
+    }
+
+    async fn post_cleanup_plan(
+        app: &Router,
+        command_id: u128,
+        items: Vec<CleanupPlanItemRefDto>,
+    ) -> Response {
+        let create_plan = CreateCleanupPlanRequestDto::new(
+            PROTOCOL_VERSION,
+            DecimalU128Dto::from_u128(command_id),
+            items,
+        );
+        app.clone()
+            .oneshot(post_json("/v1/cleanup/plans", create_plan))
+            .await
+            .expect("create plan response")
+    }
+
+    async fn post_execute_cleanup_plan(app: &Router, command_id: u128, plan_id: u128) -> Response {
+        let execute_plan = ExecuteCleanupPlanRequestDto::new(
+            PROTOCOL_VERSION,
+            DecimalU128Dto::from_u128(command_id),
+            DecimalU128Dto::from_u128(plan_id),
+        );
+        app.clone()
+            .oneshot(post_json(
+                &format!("/v1/cleanup/plans/{plan_id}/execute"),
+                execute_plan,
+            ))
+            .await
+            .expect("execute plan response")
+    }
+
     async fn wait_for_completed_scan(app: &Router, session_id: u128) -> ScanSessionStatusDto {
         let path = format!("/v1/scans/{session_id}");
         let mut last_status = None;
@@ -3544,29 +3636,21 @@ mod tests {
         let status = wait_for_completed_scan(&app, 1).await;
         assert_eq!(status.state(), SessionStateDto::Completed);
 
-        let cleanup = ExecuteCleanupRequestDto::new(
-            PROTOCOL_VERSION,
-            DecimalU128Dto::from_u128(2),
-            vec![
-                CleanupPlanItemRefDto::new(
-                    DecimalU128Dto::from_u128(1),
-                    DecimalU128Dto::from_u128(1),
-                    DecimalU64Dto::from_u64(2),
-                ),
-                CleanupPlanItemRefDto::new(
-                    DecimalU128Dto::from_u128(1),
-                    DecimalU128Dto::from_u128(1),
-                    DecimalU64Dto::from_u64(3),
-                ),
-            ],
-        );
-        let response = app
-            .oneshot(post_json("/v1/cleanup/execute", cleanup))
-            .await
-            .expect("cleanup response");
+        let response = post_cleanup_plan(
+            &app,
+            2,
+            vec![cleanup_item_ref(1, 1, 2), cleanup_item_ref(1, 1, 3)],
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let plan: CleanupPlanDto = response_json(response).await;
+        assert_eq!(plan.state(), CleanupPlanStateDto::Ready);
+
+        let response = post_execute_cleanup_plan(&app, 3, plan.plan_id().to_u128()).await;
         assert_eq!(response.status(), StatusCode::OK);
         let receipt: CleanupReceiptDto = response_json(response).await;
 
+        assert_eq!(receipt.command_id().to_u128(), 3);
         assert_eq!(receipt.state(), CleanupReceiptStateDto::Completed);
         assert_eq!(
             receipt.items()[0].state(),
@@ -3636,20 +3720,7 @@ mod tests {
         let status = wait_for_completed_scan(&app, 1).await;
         assert_eq!(status.state(), SessionStateDto::Completed);
 
-        let create_plan = CreateCleanupPlanRequestDto::new(
-            PROTOCOL_VERSION,
-            DecimalU128Dto::from_u128(2),
-            vec![CleanupPlanItemRefDto::new(
-                DecimalU128Dto::from_u128(1),
-                DecimalU128Dto::from_u128(1),
-                DecimalU64Dto::from_u64(2),
-            )],
-        );
-        let response = app
-            .clone()
-            .oneshot(post_json("/v1/cleanup/plans", create_plan))
-            .await
-            .expect("create plan response");
+        let response = post_cleanup_plan(&app, 2, vec![cleanup_item_ref(1, 1, 2)]).await;
         assert_eq!(response.status(), StatusCode::OK);
         let plan: CleanupPlanDto = response_json(response).await;
 
@@ -3658,15 +3729,7 @@ mod tests {
         assert_eq!(plan.state(), CleanupPlanStateDto::Ready);
         assert_eq!(plan.items()[0].state(), CleanupPlanItemStateDto::Ready);
 
-        let execute_plan = ExecuteCleanupPlanRequestDto::new(
-            PROTOCOL_VERSION,
-            DecimalU128Dto::from_u128(3),
-            plan.plan_id().clone(),
-        );
-        let response = app
-            .oneshot(post_json("/v1/cleanup/plans/1/execute", execute_plan))
-            .await
-            .expect("execute plan response");
+        let response = post_execute_cleanup_plan(&app, 3, 1).await;
         assert_eq!(response.status(), StatusCode::OK);
         let receipt: CleanupReceiptDto = response_json(response).await;
 
@@ -3676,6 +3739,15 @@ mod tests {
             trash_adapter.paths.lock().expect("paths").as_slice(),
             &[file_path]
         );
+
+        let response = post_execute_cleanup_plan(&app, 4, 1).await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        let response = post_execute_cleanup_plan(&app, 3, 1).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let retried_receipt: CleanupReceiptDto = response_json(response).await;
+        assert_eq!(retried_receipt.command_id().to_u128(), 3);
+        assert_eq!(trash_adapter.paths.lock().expect("paths").len(), 1);
     }
 
     #[tokio::test]
@@ -3812,7 +3884,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cleanup_execute_blocks_file_changed_since_scan_identity() {
+    async fn cleanup_plan_creation_blocks_file_changed_since_scan_identity() {
         let fixture_dir = test_path("cleanup-stale-identity");
         fs::create_dir_all(&fixture_dir).expect("fixture dir");
         let file_path = fixture_dir.join("alpha.log");
@@ -3874,36 +3946,18 @@ mod tests {
         std::thread::sleep(Duration::from_millis(20));
         fs::write(&file_path, b"TEST").expect("mutate fixture file");
 
-        let cleanup = ExecuteCleanupRequestDto::new(
-            PROTOCOL_VERSION,
-            DecimalU128Dto::from_u128(2),
-            vec![CleanupPlanItemRefDto::new(
-                DecimalU128Dto::from_u128(1),
-                DecimalU128Dto::from_u128(1),
-                DecimalU64Dto::from_u64(2),
-            )],
-        );
-        let response = app
-            .oneshot(post_json("/v1/cleanup/execute", cleanup))
-            .await
-            .expect("cleanup response");
+        let response = post_cleanup_plan(&app, 2, vec![cleanup_item_ref(1, 1, 2)]).await;
         assert_eq!(response.status(), StatusCode::OK);
-        let receipt: CleanupReceiptDto = response_json(response).await;
+        let plan: CleanupPlanDto = response_json(response).await;
 
-        assert_eq!(
-            receipt.state(),
-            CleanupReceiptStateDto::CompletedWithFailures
-        );
-        assert_eq!(
-            receipt.items()[0].state(),
-            CleanupItemOutcomeStateDto::Blocked
-        );
-        assert_eq!(receipt.items()[0].reason(), Some("stale_modified"));
+        assert_eq!(plan.state(), CleanupPlanStateDto::Blocked);
+        assert_eq!(plan.items()[0].state(), CleanupPlanItemStateDto::Blocked);
+        assert_eq!(plan.items()[0].reason(), Some("stale_modified"));
         assert!(trash_adapter.paths.lock().expect("paths").is_empty());
     }
 
     #[tokio::test]
-    async fn cleanup_execute_rejects_nested_plan_items_before_journal_or_trash() {
+    async fn cleanup_plan_rejects_nested_plan_items_before_journal_or_trash() {
         let fixture_dir = test_path("cleanup-overlap");
         fs::create_dir_all(&fixture_dir).expect("fixture dir");
         let file_path = fixture_dir.join("alpha.log");
@@ -3960,26 +4014,12 @@ mod tests {
         let status = wait_for_completed_scan(&app, 1).await;
         assert_eq!(status.state(), SessionStateDto::Completed);
 
-        let cleanup = ExecuteCleanupRequestDto::new(
-            PROTOCOL_VERSION,
-            DecimalU128Dto::from_u128(2),
-            vec![
-                CleanupPlanItemRefDto::new(
-                    DecimalU128Dto::from_u128(1),
-                    DecimalU128Dto::from_u128(1),
-                    DecimalU64Dto::from_u64(1),
-                ),
-                CleanupPlanItemRefDto::new(
-                    DecimalU128Dto::from_u128(1),
-                    DecimalU128Dto::from_u128(1),
-                    DecimalU64Dto::from_u64(2),
-                ),
-            ],
-        );
-        let response = app
-            .oneshot(post_json("/v1/cleanup/execute", cleanup))
-            .await
-            .expect("cleanup response");
+        let response = post_cleanup_plan(
+            &app,
+            2,
+            vec![cleanup_item_ref(1, 1, 1), cleanup_item_ref(1, 1, 2)],
+        )
+        .await;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         assert!(!journal_path.exists());
@@ -3987,7 +4027,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn cleanup_execute_rejects_active_overlapping_operation() {
+    async fn cleanup_plan_execute_rejects_active_overlapping_operation() {
         let fixture_dir = test_path("cleanup-active-overlap");
         fs::create_dir_all(&fixture_dir).expect("fixture dir");
         let file_path = fixture_dir.join("alpha.log");
@@ -4044,45 +4084,39 @@ mod tests {
         let status = wait_for_completed_scan(&app, 1).await;
         assert_eq!(status.state(), SessionStateDto::Completed);
 
-        let first_cleanup = ExecuteCleanupRequestDto::new(
-            PROTOCOL_VERSION,
-            DecimalU128Dto::from_u128(2),
-            vec![CleanupPlanItemRefDto::new(
-                DecimalU128Dto::from_u128(1),
-                DecimalU128Dto::from_u128(1),
-                DecimalU64Dto::from_u64(2),
-            )],
-        );
-        let second_cleanup = ExecuteCleanupRequestDto::new(
-            PROTOCOL_VERSION,
-            DecimalU128Dto::from_u128(3),
-            vec![CleanupPlanItemRefDto::new(
-                DecimalU128Dto::from_u128(1),
-                DecimalU128Dto::from_u128(1),
-                DecimalU64Dto::from_u64(2),
-            )],
-        );
+        let first_plan_response = post_cleanup_plan(&app, 2, vec![cleanup_item_ref(1, 1, 2)]).await;
+        assert_eq!(first_plan_response.status(), StatusCode::OK);
+        let first_plan: CleanupPlanDto = response_json(first_plan_response).await;
+        let second_plan_response =
+            post_cleanup_plan(&app, 3, vec![cleanup_item_ref(1, 1, 2)]).await;
+        assert_eq!(second_plan_response.status(), StatusCode::OK);
+        let second_plan: CleanupPlanDto = response_json(second_plan_response).await;
+
+        let first_plan_id = first_plan.plan_id().to_u128();
         let first_app = app.clone();
-        let first = tokio::spawn(async move {
-            first_app
-                .oneshot(post_json("/v1/cleanup/execute", first_cleanup))
-                .await
-                .expect("first cleanup response")
-        });
+        let first =
+            tokio::spawn(
+                async move { post_execute_cleanup_plan(&first_app, 4, first_plan_id).await },
+            );
         tokio::time::sleep(Duration::from_millis(40)).await;
-        let second_response = app
-            .oneshot(post_json("/v1/cleanup/execute", second_cleanup))
-            .await
-            .expect("second cleanup response");
+        let same_command_response = post_execute_cleanup_plan(&app, 4, first_plan_id).await;
+        let second_response =
+            post_execute_cleanup_plan(&app, 5, second_plan.plan_id().to_u128()).await;
         let first_response = first.await.expect("first task");
 
+        assert_eq!(same_command_response.status(), StatusCode::CONFLICT);
         assert_eq!(second_response.status(), StatusCode::CONFLICT);
         assert_eq!(first_response.status(), StatusCode::OK);
         assert_eq!(trash_adapter.paths.lock().expect("paths").len(), 1);
+
+        let retry_second_response =
+            post_execute_cleanup_plan(&app, 5, second_plan.plan_id().to_u128()).await;
+        assert_eq!(retry_second_response.status(), StatusCode::OK);
+        assert_eq!(trash_adapter.paths.lock().expect("paths").len(), 2);
     }
 
     #[tokio::test]
-    async fn cleanup_execute_rejects_zero_command_id_before_journal_or_trash() {
+    async fn cleanup_plan_rejects_zero_command_id_before_journal_or_trash() {
         let journal_path = test_path("cleanup-zero-command").join("journal.jsonl");
         let trash_adapter = Arc::new(RecordingTrashAdapter::default());
         let state = AppState::new_with_cleanup(
@@ -4096,20 +4130,7 @@ mod tests {
             ),
         );
         let app = build_router(state);
-        let cleanup = ExecuteCleanupRequestDto::new(
-            PROTOCOL_VERSION,
-            DecimalU128Dto::from_u128(0),
-            vec![CleanupPlanItemRefDto::new(
-                DecimalU128Dto::from_u128(1),
-                DecimalU128Dto::from_u128(1),
-                DecimalU64Dto::from_u64(1),
-            )],
-        );
-
-        let response = app
-            .oneshot(post_json("/v1/cleanup/execute", cleanup))
-            .await
-            .expect("cleanup response");
+        let response = post_cleanup_plan(&app, 0, vec![cleanup_item_ref(1, 1, 1)]).await;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         assert!(!journal_path.exists());
@@ -4117,14 +4138,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cleanup_execute_rejects_duplicate_items_before_journal_or_trash() {
+    async fn cleanup_plan_rejects_duplicate_items_before_journal_or_trash() {
         let journal_path = test_path("cleanup-duplicates").join("journal.jsonl");
         let trash_adapter = Arc::new(RecordingTrashAdapter::default());
-        let item = CleanupPlanItemRefDto::new(
-            DecimalU128Dto::from_u128(1),
-            DecimalU128Dto::from_u128(1),
-            DecimalU64Dto::from_u64(1),
-        );
+        let item = cleanup_item_ref(1, 1, 1);
         let state = AppState::new_with_cleanup(
             ServerConfig::local_default().with_auth_token("test-token"),
             Arc::new(FakeScannerBackend::sample()),
@@ -4136,16 +4153,7 @@ mod tests {
             ),
         );
         let app = build_router(state);
-        let cleanup = ExecuteCleanupRequestDto::new(
-            PROTOCOL_VERSION,
-            DecimalU128Dto::from_u128(8),
-            vec![item.clone(), item],
-        );
-
-        let response = app
-            .oneshot(post_json("/v1/cleanup/execute", cleanup))
-            .await
-            .expect("cleanup response");
+        let response = post_cleanup_plan(&app, 8, vec![item.clone(), item]).await;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         assert!(!journal_path.exists());

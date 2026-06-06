@@ -70,7 +70,7 @@ void main() {
       expect(request.path, '/v1/permission-probe');
       expect(request.method, HttpMethod.post);
       final body = request.body as JsonBody?;
-      expect(body?.data['protocolVersion'], {'major': 0, 'minor': 4});
+      expect(body?.data['protocolVersion'], {'major': 0, 'minor': 5});
       expect(body?.data['target'], {
         'path': '/tmp/clean-disk-fixture',
         'scope': 'local_path',
@@ -111,7 +111,7 @@ void main() {
         expect(body?.data['commandId'], '9');
         expect(body?.data['items'], hasLength(1));
         return {
-          'protocolVersion': {'major': 0, 'minor': 4},
+          'protocolVersion': {'major': 0, 'minor': 5},
           'planId': '55',
           'commandId': '9',
           'state': 'ready',
