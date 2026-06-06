@@ -4758,12 +4758,26 @@ class _AppTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      context.cleanDiskL10n.appTitle,
-      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-        color: Colors.white,
-        fontWeight: FontWeight.w800,
-        letterSpacing: 0,
+    return SizedBox(
+      height: 38,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          context.cleanDiskL10n.appTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textHeightBehavior: const TextHeightBehavior(
+            applyHeightToFirstAscent: false,
+            applyHeightToLastDescent: false,
+          ),
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            color: Colors.white,
+            fontSize: 17,
+            fontWeight: FontWeight.w800,
+            height: 1,
+            letterSpacing: 0,
+          ),
+        ),
       ),
     );
   }
