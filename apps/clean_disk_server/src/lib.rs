@@ -1649,7 +1649,7 @@ async fn execute_cleanup_plan(
         );
     };
 
-    execute_cleanup_record(&state, command_id, &plan)
+    execute_cleanup_record_blocking(state, command_id, plan).await
 }
 
 async fn execute_cleanup(
@@ -1674,7 +1674,24 @@ async fn execute_cleanup(
         Err(response) => return *response,
     };
 
-    execute_cleanup_record(&state, command_id, &plan)
+    execute_cleanup_record_blocking(state, command_id, plan).await
+}
+
+async fn execute_cleanup_record_blocking(
+    state: AppState,
+    command_id: u128,
+    plan: CleanupPlanRecord,
+) -> Response {
+    match tokio::task::spawn_blocking(move || execute_cleanup_record(&state, command_id, &plan))
+        .await
+    {
+        Ok(response) => response,
+        Err(_) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "cleanup_worker_panicked",
+            "cleanup worker panicked",
+        ),
+    }
 }
 
 fn execute_cleanup_record(
@@ -2057,9 +2074,8 @@ fn resolve_cleanup_candidates(
                 .ok_or_else(|| Box::new(invalid_session_response()))?;
             let snapshot_id = parse_snapshot_id(item.snapshot_id().to_u128())
                 .ok_or_else(|| Box::new(invalid_snapshot_response()))?;
-            let node_id =
-                parse_node_id(item.node_id().to_u64())
-                    .ok_or_else(|| Box::new(invalid_node_response()))?;
+            let node_id = parse_node_id(item.node_id().to_u64())
+                .ok_or_else(|| Box::new(invalid_node_response()))?;
             let record = state
                 .registry()
                 .node_record(session_id, snapshot_id, node_id)
