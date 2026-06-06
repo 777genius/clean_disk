@@ -1,0 +1,24 @@
+name: dio_http_client
+description: Dio-based implementation of abstract_http_client with full support for token refresh, retry policies, and observability.
+version: 1.0.0
+resolution: workspace
+publish_to: none
+repository: https://github.com/user/dio_http_client
+issue_tracker: https://github.com/user/dio_http_client/issues
+homepage: https://github.com/user/dio_http_client
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  # For local development, use path dependency.
+  # For pub.dev publishing, change to: abstract_http_client: ^1.0.0
+  abstract_http_client:
+    path: ../abstract_http_client
+  dio: ^5.7.0
+  meta: ^1.15.0
+
+dev_dependencies:
+  mocktail: ^1.0.4
+  test: ^1.25.8
+  very_good_analysis: ^10.2.0

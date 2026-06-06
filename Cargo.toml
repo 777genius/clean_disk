@@ -1,0 +1,19 @@
+[workspace]
+resolver = "3"
+members = [
+  "apps/clean_disk_server",
+  "rust/crates/clean_disk_protocol",
+  "rust/crates/fs_usage_core",
+  "rust/crates/fs_usage_engine",
+  "rust/crates/fs_usage_platform",
+  "rust/crates/fs_usage_pdu",
+]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.95"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+

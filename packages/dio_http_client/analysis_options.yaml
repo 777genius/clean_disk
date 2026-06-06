@@ -1,0 +1,18 @@
+include: package:very_good_analysis/analysis_options.yaml
+
+analyzer:
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+    - "test/**"
+
+linter:
+  rules:
+    public_member_api_docs: true
+    lines_longer_than_80_chars: false
+    # Vendored package keeps narrow ignore comments for debug-only branches.
+    document_ignores: false
+    # Disabled for tests - cascades reduce readability in test assertions
+    cascade_invocations: false
+    # Tests need to access dynamic results from body encoder
+    avoid_dynamic_calls: false

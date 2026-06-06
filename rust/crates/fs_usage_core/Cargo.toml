@@ -1,0 +1,10 @@
+[package]
+name = "fs_usage_core"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+

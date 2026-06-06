@@ -1,0 +1,24 @@
+name: clean_disk_scan
+description: Scan feature package for Clean Disk.
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  abstract_http_client: any
+  clean_disk_core: any
+  clean_disk_design_system: any
+  clean_disk_localization: any
+  flutter:
+    sdk: flutter
+  flutter_mobx: ^2.3.0
+  mobx: ^2.5.0
+  modularity_flutter: ^0.3.1
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+  test: ^1.30.0

@@ -1,0 +1,13 @@
+[package]
+name = "fs_usage_platform"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+fs_usage_core = { path = "../fs_usage_core" }
+trash = "5.2.6"
+
+[lints]
+workspace = true

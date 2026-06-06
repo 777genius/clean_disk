@@ -1,0 +1,34 @@
+name: clean_disk_app
+description: Clean Disk universal Flutter application.
+publish_to: none
+resolution: workspace
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  abstract_http_client: any
+  drift: any
+  file_selector: ^1.1.0
+  get_it: ^9.2.1
+  go_router: ^17.2.3
+  modularity_flutter: ^0.3.1
+  clean_disk_core: any
+  clean_disk_cache: any
+  clean_disk_design_system: any
+  clean_disk_localization: any
+  clean_disk_network: any
+  clean_disk_scan: any
+  marionette_flutter: ^0.5.0
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+  marionette_mcp: ^0.5.0
+
+flutter:
+  uses-material-design: true

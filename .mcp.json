@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "marionette": {
+      "command": "sh",
+      "args": [
+        "-lc",
+        "cd apps/clean_disk && fvm dart run marionette_mcp"
+      ]
+    }
+  }
+}

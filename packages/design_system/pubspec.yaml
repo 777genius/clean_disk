@@ -1,0 +1,30 @@
+name: clean_disk_design_system
+description: App-level design system facade for Clean Disk.
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  headless: ^1.1.0
+
+flutter:
+  fonts:
+    - family: Involve
+      fonts:
+        - asset: assets/fonts/involve/Involve-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/involve/Involve-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/involve/Involve-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/involve/Involve-Bold.ttf
+          weight: 700
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter

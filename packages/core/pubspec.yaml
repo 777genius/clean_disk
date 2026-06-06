@@ -1,0 +1,13 @@
+name: clean_disk_core
+description: Shared kernel for Clean Disk domain, application, and infrastructure packages.
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.27.0

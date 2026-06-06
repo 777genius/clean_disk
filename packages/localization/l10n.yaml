@@ -1,0 +1,10 @@
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-dir: lib/src/generated
+output-localization-file: clean_disk_localizations.dart
+output-class: CleanDiskLocalizations
+nullable-getter: false
+required-resource-attributes: true
+use-escaping: true
+use-named-parameters: true
+format: true

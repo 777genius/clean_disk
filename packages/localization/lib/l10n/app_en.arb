@@ -1,0 +1,848 @@
+{
+  "@@locale": "en",
+  "appTitle": "Clean Disk",
+  "@appTitle": {
+    "description": "Application title shown in the window title, app bar, and scan shell."
+  },
+  "scanHomeShellTitle": "Workspace shell",
+  "@scanHomeShellTitle": {
+    "description": "Temporary title on the scan home page before native scan integration is wired."
+  },
+  "scanHomeShellDescription": "Native scan integration is intentionally not wired yet.",
+  "@scanHomeShellDescription": {
+    "description": "Temporary explanatory text on the scan home page before native scan integration is wired."
+  },
+  "scanAction": "Scan",
+  "@scanAction": {
+    "description": "Localized string for scanAction."
+  },
+  "scanAgainAction": "Scan again",
+  "@scanAgainAction": {
+    "description": "Primary scan action after a completed scan."
+  },
+  "pauseAction": "Pause",
+  "@pauseAction": {
+    "description": "Localized string for pauseAction."
+  },
+  "cancelScanAction": "Cancel scan",
+  "@cancelScanAction": {
+    "description": "Tooltip label for stopping an active scan when cancellation is supported."
+  },
+  "searchPlaceholder": "Search files and folders...",
+  "@searchPlaceholder": {
+    "description": "Localized string for searchPlaceholder."
+  },
+  "searchUnavailablePlaceholder": "Search after scan",
+  "@searchUnavailablePlaceholder": {
+    "description": "Placeholder shown when search is disabled because no readable scan snapshot exists yet."
+  },
+  "sortFilterAction": "Sort / Filter",
+  "@sortFilterAction": {
+    "description": "Localized string for sortFilterAction."
+  },
+  "sortSizeDescLabel": "Size",
+  "@sortSizeDescLabel": {
+    "description": "Sort option label for largest items first."
+  },
+  "sortSizeAscLabel": "Small",
+  "@sortSizeAscLabel": {
+    "description": "Sort option label for smallest items first."
+  },
+  "sortLargestFirstLabel": "Largest first",
+  "@sortLargestFirstLabel": {
+    "description": "Full sort menu label for largest items first."
+  },
+  "sortSmallestFirstLabel": "Smallest first",
+  "@sortSmallestFirstLabel": {
+    "description": "Full sort menu label for smallest items first."
+  },
+  "sortNameAscLabel": "Name A-Z",
+  "@sortNameAscLabel": {
+    "description": "Sort option label for names in ascending order."
+  },
+  "sortNameDescLabel": "Name Z-A",
+  "@sortNameDescLabel": {
+    "description": "Sort option label for names in descending order."
+  },
+  "searchResultsTitle": "Search results",
+  "@searchResultsTitle": {
+    "description": "Title for the active search results table mode."
+  },
+  "searchResultsText": "Search results for \"{query}\"",
+  "@searchResultsText": {
+    "description": "Banner text shown when the table is showing flat search results.",
+    "placeholders": {
+      "query": {
+        "type": "String",
+        "example": "cache"
+      }
+    }
+  },
+  "searchBackToTreeAction": "Back to tree",
+  "@searchBackToTreeAction": {
+    "description": "Action that clears search mode and returns to the folder tree."
+  },
+  "topItemsResultsTitle": "Top items",
+  "@topItemsResultsTitle": {
+    "description": "Title for the top-items table mode."
+  },
+  "topItemsResultsText": "Showing a flat top-items view",
+  "@topItemsResultsText": {
+    "description": "Banner text shown when the table is showing flat top-items results."
+  },
+  "settingsAction": "Settings",
+  "@settingsAction": {
+    "description": "Tooltip label for settings controls."
+  },
+  "targetHome": "Home",
+  "@targetHome": {
+    "description": "Localized string for targetHome."
+  },
+  "targetDownloads": "Downloads",
+  "@targetDownloads": {
+    "description": "Localized string for targetDownloads."
+  },
+  "targetLibrary": "Library",
+  "@targetLibrary": {
+    "description": "Localized string for targetLibrary."
+  },
+  "targetApplications": "Applications",
+  "@targetApplications": {
+    "description": "Localized string for targetApplications."
+  },
+  "targetCustom": "Folder",
+  "@targetCustom": {
+    "description": "Localized string for targetCustom."
+  },
+  "targetPickAction": "Choose folder",
+  "@targetPickAction": {
+    "description": "Action that opens a platform directory picker for the scan target."
+  },
+  "targetChangeAction": "Change folder",
+  "@targetChangeAction": {
+    "description": "Tooltip for changing an already selected folder scan target."
+  },
+  "targetRoot": "System root",
+  "@targetRoot": {
+    "description": "Label for the system root scan target preset."
+  },
+  "targetVolume": "Volume",
+  "@targetVolume": {
+    "description": "Fallback label for a mounted volume scan target preset."
+  },
+  "firstRunTargetTitle": "Choose what to scan",
+  "@firstRunTargetTitle": {
+    "description": "Title for the first-run scan target chooser."
+  },
+  "firstRunTargetText": "Pick a folder or disk before scanning so results are tied to an explicit target.",
+  "@firstRunTargetText": {
+    "description": "Short explanation in the first-run scan target chooser."
+  },
+  "totalScannedLabel": "Total Scanned",
+  "@totalScannedLabel": {
+    "description": "Localized string for totalScannedLabel."
+  },
+  "largestFolderLabel": "Largest Folder",
+  "@largestFolderLabel": {
+    "description": "Localized string for largestFolderLabel."
+  },
+  "cleanupCandidatesLabel": "Review List",
+  "@cleanupCandidatesLabel": {
+    "description": "Localized string for cleanupCandidatesLabel."
+  },
+  "skippedLabel": "Skipped",
+  "@skippedLabel": {
+    "description": "Localized string for skippedLabel."
+  },
+  "nameColumn": "Name",
+  "@nameColumn": {
+    "description": "Localized string for nameColumn."
+  },
+  "sizeColumn": "Size",
+  "@sizeColumn": {
+    "description": "Localized string for sizeColumn."
+  },
+  "percentColumn": "%",
+  "@percentColumn": {
+    "description": "Localized string for percentColumn."
+  },
+  "itemsColumn": "Items",
+  "@itemsColumn": {
+    "description": "Localized string for itemsColumn."
+  },
+  "detailsTitle": "Details",
+  "@detailsTitle": {
+    "description": "Localized string for detailsTitle."
+  },
+  "noSelectionTitle": "Select a row",
+  "@noSelectionTitle": {
+    "description": "Localized string for noSelectionTitle."
+  },
+  "noSelectionText": "Details appear after selecting a row.",
+  "@noSelectionText": {
+    "description": "Localized string for noSelectionText."
+  },
+  "noRowsTitle": "No scan data yet",
+  "@noRowsTitle": {
+    "description": "Localized string for noRowsTitle."
+  },
+  "noRowsText": "Results will appear here after the scan.",
+  "@noRowsText": {
+    "description": "Localized string for noRowsText."
+  },
+  "loadingRowsTitle": "Loading scan data",
+  "@loadingRowsTitle": {
+    "description": "Localized string for loadingRowsTitle."
+  },
+  "loadingRowsText": "Keeping current rows visible while the next page loads.",
+  "@loadingRowsText": {
+    "description": "Localized string for loadingRowsText."
+  },
+  "errorRowsTitle": "Scan data unavailable",
+  "@errorRowsTitle": {
+    "description": "Localized string for errorRowsTitle."
+  },
+  "staleRowsTitle": "Data is out of date",
+  "@staleRowsTitle": {
+    "description": "Localized string for staleRowsTitle."
+  },
+  "staleRowsText": "Run the scan again to refresh the tree.",
+  "@staleRowsText": {
+    "description": "Localized string for staleRowsText."
+  },
+  "partialRowsTitle": "Partial scan data",
+  "@partialRowsTitle": {
+    "description": "Localized string for partialRowsTitle."
+  },
+  "partialRowsText": "Some paths were skipped or degraded. Review details before acting.",
+  "@partialRowsText": {
+    "description": "Localized string for partialRowsText."
+  },
+  "revealAction": "Reveal",
+  "@revealAction": {
+    "description": "Localized string for revealAction."
+  },
+  "revealBusyAction": "Opening...",
+  "@revealBusyAction": {
+    "description": "Details action label shown while the selected file or folder is being revealed in the platform file manager."
+  },
+  "revealUnavailableDisplayPath": "Full path is not available for this row. Expand from the tree root to reveal it.",
+  "@revealUnavailableDisplayPath": {
+    "description": "Details hint shown when the UI only has a shortened display path and cannot safely reveal it in the file manager."
+  },
+  "addToQueueAction": "Add to review",
+  "@addToQueueAction": {
+    "description": "Localized string for addToQueueAction."
+  },
+  "reviewAddedAction": "In review",
+  "@reviewAddedAction": {
+    "description": "Disabled action label for a selected item that is already in the review list."
+  },
+  "movedToTrashRowLabel": "In Trash",
+  "@movedToTrashRowLabel": {
+    "description": "Short row/details status for a scan item already moved to Trash from the current stale snapshot."
+  },
+  "movedToTrashDetailsHint": "This item was already moved to Trash. Run a new scan to refresh the tree before acting on it again.",
+  "@movedToTrashDetailsHint": {
+    "description": "Details pane warning shown for an item moved to Trash after cleanup while the old scan snapshot is still visible."
+  },
+  "detailsPathLabel": "Path",
+  "@detailsPathLabel": {
+    "description": "Label for the selected file or folder display path in the details pane."
+  },
+  "detailsCreatedLabel": "Created",
+  "@detailsCreatedLabel": {
+    "description": "Label for the selected file or folder creation date in the details pane."
+  },
+  "detailsModifiedLabel": "Modified",
+  "@detailsModifiedLabel": {
+    "description": "Label for the selected file or folder modification date in the details pane."
+  },
+  "detailsChildrenLabel": "Files / Folders",
+  "@detailsChildrenLabel": {
+    "description": "Label for child item count in the details pane."
+  },
+  "detailsWarningsLabel": "Warnings",
+  "@detailsWarningsLabel": {
+    "description": "Label for scan warning count in the details pane."
+  },
+  "detailsItemsSuffix": "items",
+  "@detailsItemsSuffix": {
+    "description": "Short suffix used after a selected node child count in the details pane summary."
+  },
+  "detailsItemsCount": "{count, plural, =0{0 items} =1{1 item} other{{count} items}}",
+  "@detailsItemsCount": {
+    "description": "Selected node child item count shown in the details pane summary.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "detailsTypeLabel": "Type",
+  "@detailsTypeLabel": {
+    "description": "Label for node kind in the details pane."
+  },
+  "detailsAccountingLabel": "Accounting",
+  "@detailsAccountingLabel": {
+    "description": "Label for size accounting mode in the details pane."
+  },
+  "detailsConfidenceLabel": "Confidence",
+  "@detailsConfidenceLabel": {
+    "description": "Label for size confidence in the details pane."
+  },
+  "detailsFlagsLabel": "Flags",
+  "@detailsFlagsLabel": {
+    "description": "Label for node flags in the details pane."
+  },
+  "nodeTypeFile": "File",
+  "@nodeTypeFile": {
+    "description": "Display value for a file node."
+  },
+  "nodeTypeDirectory": "Folder",
+  "@nodeTypeDirectory": {
+    "description": "Display value for a directory node."
+  },
+  "nodeTypeSymlink": "Link",
+  "@nodeTypeSymlink": {
+    "description": "Display value for a symbolic link node."
+  },
+  "nodeTypeOther": "Other",
+  "@nodeTypeOther": {
+    "description": "Display value for another node kind."
+  },
+  "nodeTypeUnknown": "Unknown",
+  "@nodeTypeUnknown": {
+    "description": "Display value for an unknown node kind."
+  },
+  "sizeQuantityApparent": "Apparent size",
+  "@sizeQuantityApparent": {
+    "description": "Display value for apparent byte accounting."
+  },
+  "sizeQuantityAllocated": "Size on disk",
+  "@sizeQuantityAllocated": {
+    "description": "Display value for allocated byte accounting."
+  },
+  "sizeQuantityBlocks": "Block count",
+  "@sizeQuantityBlocks": {
+    "description": "Display value for block count accounting."
+  },
+  "sizeQuantityUnknown": "Unknown",
+  "@sizeQuantityUnknown": {
+    "description": "Display value for unknown size accounting."
+  },
+  "sizeConfidenceExact": "Exact",
+  "@sizeConfidenceExact": {
+    "description": "Display value for exact size confidence."
+  },
+  "sizeConfidenceHigh": "High",
+  "@sizeConfidenceHigh": {
+    "description": "Display value for high size confidence."
+  },
+  "sizeConfidenceMedium": "Medium",
+  "@sizeConfidenceMedium": {
+    "description": "Display value for medium size confidence."
+  },
+  "sizeConfidenceLow": "Low",
+  "@sizeConfidenceLow": {
+    "description": "Display value for low size confidence."
+  },
+  "sizeConfidenceUnknown": "Unknown",
+  "@sizeConfidenceUnknown": {
+    "description": "Display value for unknown size confidence."
+  },
+  "nodeFlagsNone": "None",
+  "@nodeFlagsNone": {
+    "description": "Display value when a node has no notable flags."
+  },
+  "nodeFlagHidden": "Hidden",
+  "@nodeFlagHidden": {
+    "description": "Display value for a hidden node flag."
+  },
+  "nodeFlagSystem": "System",
+  "@nodeFlagSystem": {
+    "description": "Display value for a system node flag."
+  },
+  "nodeFlagPackage": "Package",
+  "@nodeFlagPackage": {
+    "description": "Display value for a package node flag."
+  },
+  "nodeFlagSymlink": "Symlink",
+  "@nodeFlagSymlink": {
+    "description": "Display value for a symlink node flag."
+  },
+  "loadMoreRowsAction": "Load more",
+  "@loadMoreRowsAction": {
+    "description": "Button label for loading the next page of tree rows."
+  },
+  "loadMoreRowsBusy": "Loading...",
+  "@loadMoreRowsBusy": {
+    "description": "Button label while loading the next page of tree rows."
+  },
+  "deleteQueueTitle": "Review List",
+  "@deleteQueueTitle": {
+    "description": "Localized string for deleteQueueTitle."
+  },
+  "deleteQueueEmpty": "Mark a row to review before moving it to Trash.",
+  "@deleteQueueEmpty": {
+    "description": "Text shown when the cleanup preview queue is empty."
+  },
+  "deleteQueueMoreCount": "+{count} more",
+  "@deleteQueueMoreCount": {
+    "description": "Compact count for queued cleanup preview items not shown individually.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deleteQueueTotalIntent": "Estimated size: {size}",
+  "@deleteQueueTotalIntent": {
+    "description": "Known reclaim estimate total for cleanup preview.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteQueueRemoveAction": "Remove from review list",
+  "@deleteQueueRemoveAction": {
+    "description": "Tooltip for removing an item from cleanup preview queue."
+  },
+  "cleanupPreviewRefreshAction": "Validate list",
+  "@cleanupPreviewRefreshAction": {
+    "description": "Action that revalidates permission identity before showing cleanup preview state."
+  },
+  "cleanupPreviewBlocked": "Review blockers before taking any action.",
+  "@cleanupPreviewBlocked": {
+    "description": "Cleanup preview state when one or more items have blocking states."
+  },
+  "cleanupPreviewReady": "Review complete. Ready to move to Trash.",
+  "@cleanupPreviewReady": {
+    "description": "Cleanup preview state when queued items have no blockers and can be moved to Trash."
+  },
+  "cleanupPreviewBlockedShort": "Review",
+  "@cleanupPreviewBlockedShort": {
+    "description": "Short cleanup preview blocked label."
+  },
+  "cleanupPreviewReadyShort": "Ready",
+  "@cleanupPreviewReadyShort": {
+    "description": "Short cleanup preview ready label."
+  },
+  "cleanupPreviewTrashAction": "Move to Trash",
+  "@cleanupPreviewTrashAction": {
+    "description": "Action that executes a validated cleanup plan by moving items to the system Trash."
+  },
+  "cleanupPreviewTrashNoticeTitle": "System Trash only",
+  "@cleanupPreviewTrashNoticeTitle": {
+    "description": "Safety notice title for cleanup execution."
+  },
+  "cleanupPreviewTrashNoticeText": "Clean Disk revalidates the current snapshot before moving items. Nothing is permanently deleted here.",
+  "@cleanupPreviewTrashNoticeText": {
+    "description": "Safety notice explaining cleanup execution behavior."
+  },
+  "cleanupConfirmTitle": "Move selected items to Trash?",
+  "@cleanupConfirmTitle": {
+    "description": "Cleanup confirmation dialog title."
+  },
+  "cleanupConfirmText": "The selected files or folders will be moved to the system Trash. Restore them manually from Trash if needed.",
+  "@cleanupConfirmText": {
+    "description": "Cleanup confirmation dialog body."
+  },
+  "cleanupConfirmSummary": "{count, plural, =1{1 item, {size}} other{{count} items, {size}}}",
+  "@cleanupConfirmSummary": {
+    "description": "Cleanup confirmation item count and estimated size.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "cleanupConfirmCancel": "Cancel",
+  "@cleanupConfirmCancel": {
+    "description": "Cleanup confirmation cancel action."
+  },
+  "cleanupConfirmMove": "Move to Trash",
+  "@cleanupConfirmMove": {
+    "description": "Cleanup confirmation destructive action."
+  },
+  "nodeContextRefreshFolderAction": "Refresh folder",
+  "@nodeContextRefreshFolderAction": {
+    "description": "Context menu action that scans the selected folder again as the current target."
+  },
+  "cleanupStateStaleSnapshot": "Outdated data",
+  "@cleanupStateStaleSnapshot": {
+    "description": "DeletePlan item state for stale snapshot data."
+  },
+  "cleanupStateChangedMetadata": "Changed metadata",
+  "@cleanupStateChangedMetadata": {
+    "description": "DeletePlan item state for metadata changed since item was queued."
+  },
+  "cleanupStateMissingPermission": "No permission",
+  "@cleanupStateMissingPermission": {
+    "description": "DeletePlan item state for missing current scanner permission."
+  },
+  "cleanupStatePolicyConflict": "Needs review",
+  "@cleanupStatePolicyConflict": {
+    "description": "DeletePlan item state for policy conflicts."
+  },
+  "cleanupStateUnknownReclaim": "Unknown size",
+  "@cleanupStateUnknownReclaim": {
+    "description": "DeletePlan item state for unknown reclaim estimate."
+  },
+  "cleanupReceiptReady": "Receipt recorded.",
+  "@cleanupReceiptReady": {
+    "description": "Cleanup receipt summary when all outcomes are terminal without review."
+  },
+  "cleanupReceiptNeedsReview": "Receipt needs review.",
+  "@cleanupReceiptNeedsReview": {
+    "description": "Cleanup receipt summary when one or more item outcomes need review."
+  },
+  "cleanupReceiptItemMoved": "Moved to Trash",
+  "@cleanupReceiptItemMoved": {
+    "description": "Cleanup receipt item state for a successful Trash move."
+  },
+  "cleanupReceiptItemBlocked": "Blocked",
+  "@cleanupReceiptItemBlocked": {
+    "description": "Cleanup receipt item state for a blocked item."
+  },
+  "cleanupReceiptItemFailed": "Failed",
+  "@cleanupReceiptItemFailed": {
+    "description": "Cleanup receipt item state for adapter failure."
+  },
+  "cleanupReceiptItemUnknown": "Unknown outcome",
+  "@cleanupReceiptItemUnknown": {
+    "description": "Cleanup receipt item state for unknown outcome requiring review."
+  },
+  "cleanupReceiptItemPending": "Pending",
+  "@cleanupReceiptItemPending": {
+    "description": "Cleanup receipt item state for pending or dispatch-recorded item."
+  },
+  "reclaimConfidenceHigh": "High confidence",
+  "@reclaimConfidenceHigh": {
+    "description": "High reclaim estimate confidence label."
+  },
+  "reclaimConfidenceMedium": "Medium confidence",
+  "@reclaimConfidenceMedium": {
+    "description": "Medium reclaim estimate confidence label."
+  },
+  "reclaimConfidenceLow": "Low confidence",
+  "@reclaimConfidenceLow": {
+    "description": "Low reclaim estimate confidence label."
+  },
+  "reclaimConfidenceUnknown": "Unknown reclaim",
+  "@reclaimConfidenceUnknown": {
+    "description": "Unknown reclaim estimate confidence label."
+  },
+  "progressFilesScannedLabel": "Files Scanned",
+  "@progressFilesScannedLabel": {
+    "description": "Localized string for progressFilesScannedLabel."
+  },
+  "progressElapsedLabel": "Elapsed",
+  "@progressElapsedLabel": {
+    "description": "Localized string for progressElapsedLabel."
+  },
+  "progressThroughputLabel": "Throughput",
+  "@progressThroughputLabel": {
+    "description": "Label for scan throughput in the progress footer."
+  },
+  "metricNoDataValue": "No data",
+  "@metricNoDataValue": {
+    "description": "Readable value shown when a scan metric is not available yet."
+  },
+  "metricRunScanSubtitle": "Run a scan",
+  "@metricRunScanSubtitle": {
+    "description": "Metric subtitle shown before scan results are available."
+  },
+  "filesCountSuffix": "files",
+  "@filesCountSuffix": {
+    "description": "Short suffix used after a simple file count."
+  },
+  "metricCleanupReviewSubtitle": "Marked items",
+  "@metricCleanupReviewSubtitle": {
+    "description": "Subtitle for cleanup candidate metric."
+  },
+  "metricSkippedProtectedSubtitle": "System protected",
+  "@metricSkippedProtectedSubtitle": {
+    "description": "Subtitle for skipped protected path metric."
+  },
+  "driveFreeSpaceText": "108.0 GB free",
+  "@driveFreeSpaceText": {
+    "description": "Static MVP free-space label shown in the drive summary fixture."
+  },
+  "permissionProofTitle": "Permission Proof",
+  "@permissionProofTitle": {
+    "description": "Localized string for permissionProofTitle."
+  },
+  "permissionWarningTitle": "Access not verified",
+  "@permissionWarningTitle": {
+    "description": "Title for permission warnings that do not block scanning."
+  },
+  "permissionWarningDevTitle": "Development build",
+  "@permissionWarningDevTitle": {
+    "description": "Title for non-blocking warnings caused only by development packaging or unsigned scanner identity."
+  },
+  "permissionWarningDeniedText": "Access is denied. Protected folders may be skipped.",
+  "@permissionWarningDeniedText": {
+    "description": "Permission warning shown when access probe is denied."
+  },
+  "permissionWarningUnverifiedText": "Access is not verified yet. Run the probe or scan.",
+  "@permissionWarningUnverifiedText": {
+    "description": "Permission warning shown when access probe is unknown, pending, degraded, or not determined."
+  },
+  "permissionNeutralProbeText": "Access checks before scanning.",
+  "@permissionNeutralProbeText": {
+    "description": "Short neutral permission status shown before the access probe has run."
+  },
+  "permissionWarningDevIdentityText": "Access is verified. Full Disk Access may differ in a signed build.",
+  "@permissionWarningDevIdentityText": {
+    "description": "Permission warning shown when scanner identity or packaging is not production-grade."
+  },
+  "permissionIdentityLabel": "Identity",
+  "@permissionIdentityLabel": {
+    "description": "Localized string for permissionIdentityLabel."
+  },
+  "permissionProbeLabel": "Access",
+  "@permissionProbeLabel": {
+    "description": "Localized string for permissionProbeLabel."
+  },
+  "permissionScannerLabel": "Scanner",
+  "@permissionScannerLabel": {
+    "description": "Localized string for permissionScannerLabel."
+  },
+  "permissionActionLabel": "Action",
+  "@permissionActionLabel": {
+    "description": "Localized string for permissionActionLabel."
+  },
+  "permissionPackageLabel": "Package",
+  "@permissionPackageLabel": {
+    "description": "Localized string for permissionPackageLabel."
+  },
+  "permissionUpdateLabel": "Update",
+  "@permissionUpdateLabel": {
+    "description": "Localized string for permissionUpdateLabel."
+  },
+  "permissionCheckedLabel": "Checked",
+  "@permissionCheckedLabel": {
+    "description": "Localized string for permissionCheckedLabel."
+  },
+  "permissionProbeAction": "Re-check",
+  "@permissionProbeAction": {
+    "description": "Localized string for permissionProbeAction."
+  },
+  "permissionRepairTitle": "Repair access",
+  "@permissionRepairTitle": {
+    "description": "Title for the permission repair guidance dialog."
+  },
+  "permissionRepairTrustCopy": "Clean Disk reads file names, sizes, timestamps, and folder structure for the selected target. It does not read file contents.",
+  "@permissionRepairTrustCopy": {
+    "description": "Trust copy shown before asking the user to repair scan permissions."
+  },
+  "permissionRepairMacosStepOne": "Open Privacy & Security > Full Disk Access.",
+  "@permissionRepairMacosStepOne": {
+    "description": "First macOS Full Disk Access repair step."
+  },
+  "permissionRepairMacosStepTwo": "Enable Clean Disk, or clean-disk-server if macOS lists the bundled helper.",
+  "@permissionRepairMacosStepTwo": {
+    "description": "Second macOS Full Disk Access repair step with exact app and helper names."
+  },
+  "permissionRepairMacosStepThree": "Return here and re-check. The scanner confirms access before this screen marks it verified.",
+  "@permissionRepairMacosStepThree": {
+    "description": "Third macOS Full Disk Access repair step."
+  },
+  "permissionRepairWindowsStepOne": "Use the normal user scan first.",
+  "@permissionRepairWindowsStepOne": {
+    "description": "First Windows permission repair step."
+  },
+  "permissionRepairWindowsStepTwo": "If this target is still denied, use an elevated scan profile only for system folders.",
+  "@permissionRepairWindowsStepTwo": {
+    "description": "Second Windows permission repair step."
+  },
+  "permissionRepairWindowsStepThree": "Re-check before scanning again.",
+  "@permissionRepairWindowsStepThree": {
+    "description": "Third Windows permission repair step."
+  },
+  "permissionRepairLinuxStepOne": "Check folder permissions for the selected target.",
+  "@permissionRepairLinuxStepOne": {
+    "description": "First Linux permission repair step."
+  },
+  "permissionRepairLinuxStepTwo": "If the app is sandboxed, grant access through the package or portal settings.",
+  "@permissionRepairLinuxStepTwo": {
+    "description": "Second Linux permission repair step."
+  },
+  "permissionRepairLinuxStepThree": "Re-check before scanning again.",
+  "@permissionRepairLinuxStepThree": {
+    "description": "Third Linux permission repair step."
+  },
+  "permissionRepairManualStep": "Review platform access for this target, then re-check.",
+  "@permissionRepairManualStep": {
+    "description": "Fallback permission repair step."
+  },
+  "permissionRepairOpenSettings": "Open Settings",
+  "@permissionRepairOpenSettings": {
+    "description": "Button label for opening platform permission settings."
+  },
+  "permissionRepairCancel": "Cancel",
+  "@permissionRepairCancel": {
+    "description": "Button label for closing permission repair guidance."
+  },
+  "permissionIdentityVerified": "Verified",
+  "@permissionIdentityVerified": {
+    "description": "Localized string for permissionIdentityVerified."
+  },
+  "permissionIdentityUnverified": "Unverified",
+  "@permissionIdentityUnverified": {
+    "description": "Localized string for permissionIdentityUnverified."
+  },
+  "permissionIdentityUnknown": "Unknown",
+  "@permissionIdentityUnknown": {
+    "description": "Localized string for permissionIdentityUnknown."
+  },
+  "permissionProbeVerified": "Verified",
+  "@permissionProbeVerified": {
+    "description": "Localized string for permissionProbeVerified."
+  },
+  "permissionProbeDenied": "Denied",
+  "@permissionProbeDenied": {
+    "description": "Localized string for permissionProbeDenied."
+  },
+  "permissionProbeNotDetermined": "Not determined",
+  "@permissionProbeNotDetermined": {
+    "description": "Localized string for permissionProbeNotDetermined."
+  },
+  "permissionProbePending": "Probe pending",
+  "@permissionProbePending": {
+    "description": "Localized string for permissionProbePending."
+  },
+  "permissionProbeDegraded": "Degraded",
+  "@permissionProbeDegraded": {
+    "description": "Localized string for permissionProbeDegraded."
+  },
+  "permissionProbeUnsupported": "Unsupported",
+  "@permissionProbeUnsupported": {
+    "description": "Localized string for permissionProbeUnsupported."
+  },
+  "permissionProbeUnknown": "Unknown",
+  "@permissionProbeUnknown": {
+    "description": "Localized string for permissionProbeUnknown."
+  },
+  "permissionScannerAppBundle": "App bundle",
+  "@permissionScannerAppBundle": {
+    "description": "Localized string for permissionScannerAppBundle."
+  },
+  "permissionScannerBundledHelper": "Bundled helper",
+  "@permissionScannerBundledHelper": {
+    "description": "Localized string for permissionScannerBundledHelper."
+  },
+  "permissionScannerCurrentProcess": "Current process",
+  "@permissionScannerCurrentProcess": {
+    "description": "Localized string for permissionScannerCurrentProcess."
+  },
+  "permissionScannerExternalProcess": "External process",
+  "@permissionScannerExternalProcess": {
+    "description": "Localized string for permissionScannerExternalProcess."
+  },
+  "permissionScannerUnknown": "Unknown scanner",
+  "@permissionScannerUnknown": {
+    "description": "Localized string for permissionScannerUnknown."
+  },
+  "permissionActionNone": "No action needed",
+  "@permissionActionNone": {
+    "description": "Localized string for permissionActionNone."
+  },
+  "permissionActionMacosFullDiskAccess": "Guide Full Disk Access, then re-check",
+  "@permissionActionMacosFullDiskAccess": {
+    "description": "Localized string for permissionActionMacosFullDiskAccess."
+  },
+  "permissionActionWindowsAdministrator": "Use admin scan only if needed",
+  "@permissionActionWindowsAdministrator": {
+    "description": "Localized string for permissionActionWindowsAdministrator."
+  },
+  "permissionActionLinuxPermissions": "Review Linux permissions, then re-check",
+  "@permissionActionLinuxPermissions": {
+    "description": "Localized string for permissionActionLinuxPermissions."
+  },
+  "permissionActionUnknown": "Manual review needed",
+  "@permissionActionUnknown": {
+    "description": "Localized string for permissionActionUnknown."
+  },
+  "permissionActionReducedPackage": "Reduced dev package - verify signed build",
+  "@permissionActionReducedPackage": {
+    "description": "Localized string for permissionActionReducedPackage."
+  },
+  "permissionPackageDevelopment": "Dev shell",
+  "@permissionPackageDevelopment": {
+    "description": "Localized string for permissionPackageDevelopment."
+  },
+  "permissionPackageAppBundle": "App bundle",
+  "@permissionPackageAppBundle": {
+    "description": "Localized string for permissionPackageAppBundle."
+  },
+  "permissionPackageBundledDaemon": "Bundled daemon",
+  "@permissionPackageBundledDaemon": {
+    "description": "Localized string for permissionPackageBundledDaemon."
+  },
+  "permissionPackageSystemService": "System service",
+  "@permissionPackageSystemService": {
+    "description": "Localized string for permissionPackageSystemService."
+  },
+  "permissionPackagePortable": "Portable",
+  "@permissionPackagePortable": {
+    "description": "Localized string for permissionPackagePortable."
+  },
+  "permissionPackageUnknown": "Unknown package",
+  "@permissionPackageUnknown": {
+    "description": "Localized string for permissionPackageUnknown."
+  },
+  "permissionSignedBuild": "Signed",
+  "@permissionSignedBuild": {
+    "description": "Localized string for permissionSignedBuild."
+  },
+  "permissionUnsignedBuild": "Unsigned",
+  "@permissionUnsignedBuild": {
+    "description": "Localized string for permissionUnsignedBuild."
+  },
+  "permissionUpdateQuiesceRequired": "Quiesce required",
+  "@permissionUpdateQuiesceRequired": {
+    "description": "Localized string for permissionUpdateQuiesceRequired."
+  },
+  "permissionUpdateNoQuiesce": "No quiesce required",
+  "@permissionUpdateNoQuiesce": {
+    "description": "Localized string for permissionUpdateNoQuiesce."
+  },
+  "permissionUpdateUnknown": "Update safety unknown",
+  "@permissionUpdateUnknown": {
+    "description": "Localized string for permissionUpdateUnknown."
+  },
+  "permissionCheckedNever": "Not checked",
+  "@permissionCheckedNever": {
+    "description": "Localized string for permissionCheckedNever."
+  },
+  "permissionCheckedUnknown": "Unknown time",
+  "@permissionCheckedUnknown": {
+    "description": "Localized string for permissionCheckedUnknown."
+  },
+  "scanReadyStatus": "Ready",
+  "@scanReadyStatus": {
+    "description": "Localized string for scanReadyStatus."
+  },
+  "scanRunningStatus": "Scanning...",
+  "@scanRunningStatus": {
+    "description": "Localized string for scanRunningStatus."
+  },
+  "scanCompletedStatus": "Scan complete",
+  "@scanCompletedStatus": {
+    "description": "Localized string for scanCompletedStatus."
+  },
+  "scanOfflineStatus": "Daemon offline",
+  "@scanOfflineStatus": {
+    "description": "Localized string for scanOfflineStatus."
+  },
+  "scanIncompatibleStatus": "Protocol incompatible",
+  "@scanIncompatibleStatus": {
+    "description": "Localized string for scanIncompatibleStatus."
+  }
+}

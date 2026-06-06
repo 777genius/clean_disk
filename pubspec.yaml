@@ -1,0 +1,75 @@
+name: clean_disk_workspace
+description: Clean Disk Flutter workspace.
+publish_to: none
+
+environment:
+  sdk: ^3.11.5
+
+workspace:
+  - apps/clean_disk
+  - features/scan
+  - packages/abstract_http_client
+  - packages/cache
+  - packages/core
+  - packages/design_system
+  - packages/dio_http_client
+  - packages/localization
+  - packages/network
+
+dev_dependencies:
+  melos: ^7.5.1
+
+melos:
+  scripts:
+    get:
+      run: fvm dart pub get
+      description: Resolve workspace dependencies.
+    codegen:
+      run: fvm dart run melos exec --depends-on build_runner -- "fvm dart run fast_build_runner build"
+      description: Run code generation through fast_build_runner.
+    codegen:fallback:
+      run: fvm dart run melos exec --depends-on build_runner -- "fvm dart run build_runner build"
+      description: Fallback code generation through build_runner.
+    analyze:
+      run: fvm flutter analyze
+      description: Analyze all workspace packages.
+    test:
+      run: fvm dart run melos exec --concurrency=1 --dir-exists=test -- "fvm flutter test"
+      description: Run tests in packages with test directories.
+
+dependency_overrides:
+  analyzer: 10.0.0
+  build_runner: 2.13.1
+  dart_style: 3.1.5
+  anchored_overlay_engine:
+    path: ../headless/packages/anchored_overlay_engine
+  fast_build_runner:
+    path: ../fast_build_runner
+  fast_build_runner_internal:
+    path: ../fast_build_runner/packages/fast_build_runner_internal
+  headless:
+    path: ../headless/packages/headless
+  headless_autocomplete:
+    path: ../headless/packages/components/headless_autocomplete
+  headless_button:
+    path: ../headless/packages/components/headless_button
+  headless_checkbox:
+    path: ../headless/packages/components/headless_checkbox
+  headless_contracts:
+    path: ../headless/packages/headless_contracts
+  headless_cupertino:
+    path: ../headless/packages/headless_cupertino
+  headless_dropdown_button:
+    path: ../headless/packages/components/headless_dropdown_button
+  headless_foundation:
+    path: ../headless/packages/headless_foundation
+  headless_material:
+    path: ../headless/packages/headless_material
+  headless_switch:
+    path: ../headless/packages/components/headless_switch
+  headless_textfield:
+    path: ../headless/packages/components/headless_textfield
+  headless_theme:
+    path: ../headless/packages/headless_theme
+  headless_tokens:
+    path: ../headless/packages/headless_tokens

@@ -1,0 +1,17 @@
+.fvm/flutter_sdk
+.fvm/versions
+.fvm/release
+.fvm/version
+.dart_tool/
+.idea/
+.DS_Store
+.flutter-plugins-dependencies
+build/
+target/
+coverage/
+*.iml
+.env
+.env.*
+!.env.example
+!AGENTS.md
+!README.md

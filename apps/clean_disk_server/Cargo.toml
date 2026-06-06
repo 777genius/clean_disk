@@ -1,0 +1,23 @@
+[package]
+name = "clean-disk-server"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+axum = { version = "0.8.9", features = ["ws"] }
+clean_disk_protocol = { path = "../../rust/crates/clean_disk_protocol" }
+fs_usage_core = { path = "../../rust/crates/fs_usage_core" }
+fs_usage_engine = { path = "../../rust/crates/fs_usage_engine" }
+fs_usage_platform = { path = "../../rust/crates/fs_usage_platform" }
+fs_usage_pdu = { path = "../../rust/crates/fs_usage_pdu" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+tokio = { version = "1.52.3", features = ["macros", "net", "rt-multi-thread", "signal", "sync"] }
+
+[dev-dependencies]
+tower = { version = "0.5.3", features = ["util"] }
+
+[lints]
+workspace = true

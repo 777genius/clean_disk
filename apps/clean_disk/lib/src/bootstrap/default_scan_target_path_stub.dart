@@ -1,0 +1,3 @@
+String defaultScanTargetPath() {
+  return '/';
+}

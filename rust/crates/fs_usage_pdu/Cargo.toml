@@ -1,0 +1,14 @@
+[package]
+name = "fs_usage_pdu"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+fs_usage_core = { path = "../fs_usage_core" }
+fs_usage_engine = { path = "../fs_usage_engine" }
+parallel-disk-usage = { version = "0.24.0", default-features = false }
+
+[lints]
+workspace = true

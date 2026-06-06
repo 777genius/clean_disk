@@ -1,0 +1,20 @@
+name: abstract_http_client
+description: Platform-agnostic HTTP client contracts and base implementations. Zero dependencies on specific HTTP libraries.
+version: 1.0.0
+resolution: workspace
+publish_to: none
+repository: https://github.com/777genius/abstract_http_client
+issue_tracker: https://github.com/777genius/abstract_http_client/issues
+homepage: https://github.com/777genius/abstract_http_client
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  collection: ^1.19.0
+  meta: ^1.15.0
+
+dev_dependencies:
+  mocktail: ^1.0.0
+  test: ^1.25.0
+  very_good_analysis: ^10.2.0
