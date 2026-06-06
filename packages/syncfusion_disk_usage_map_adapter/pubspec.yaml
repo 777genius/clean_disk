@@ -1,0 +1,21 @@
+name: syncfusion_disk_usage_map_adapter
+description: Optional Syncfusion renderer adapter for Clean Disk disk usage maps.
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  clean_disk_design_system: any
+  syncfusion_flutter_treemap: ^33.2.10
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
