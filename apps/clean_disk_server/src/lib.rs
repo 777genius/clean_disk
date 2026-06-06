@@ -1903,22 +1903,22 @@ fn execute_cleanup_record(
 fn validate_cleanup_protocol_and_command(
     protocol_version: clean_disk_protocol::ProtocolVersionDto,
     command_id: &DecimalU128Dto,
-) -> Result<u128, Response> {
+) -> HandlerResult<u128> {
     if !PROTOCOL_VERSION.is_compatible_with(protocol_version) {
-        return Err(error_response(
+        return Err(Box::new(error_response(
             StatusCode::BAD_REQUEST,
             "incompatible_protocol",
             "protocol version is not compatible",
-        ));
+        )));
     }
 
     let command_id = command_id.to_u128();
     if command_id == 0 {
-        return Err(error_response(
+        return Err(Box::new(error_response(
             StatusCode::BAD_REQUEST,
             "invalid_command_id",
             "command id is zero",
-        ));
+        )));
     }
     Ok(command_id)
 }
@@ -1927,28 +1927,28 @@ fn validate_cleanup_plan_request(
     protocol_version: clean_disk_protocol::ProtocolVersionDto,
     command_id: &DecimalU128Dto,
     items: &[CleanupPlanItemRefDto],
-) -> Result<u128, Response> {
+) -> HandlerResult<u128> {
     let command_id = validate_cleanup_protocol_and_command(protocol_version, command_id)?;
     if items.is_empty() {
-        return Err(error_response(
+        return Err(Box::new(error_response(
             StatusCode::BAD_REQUEST,
             "empty_cleanup_plan",
             "cleanup plan must contain at least one item",
-        ));
+        )));
     }
     if has_duplicate_cleanup_item_refs(items) {
-        return Err(error_response(
+        return Err(Box::new(error_response(
             StatusCode::BAD_REQUEST,
             "duplicate_cleanup_item",
             "cleanup plan contains duplicate item references",
-        ));
+        )));
     }
     if has_mixed_cleanup_snapshot_refs(items) {
-        return Err(error_response(
+        return Err(Box::new(error_response(
             StatusCode::BAD_REQUEST,
             "mixed_cleanup_snapshot",
             "cleanup plan items must belong to one session snapshot",
-        ));
+        )));
     }
     Ok(command_id)
 }
@@ -1958,7 +1958,7 @@ fn build_cleanup_plan_record(
     plan_id: u128,
     command_id: u128,
     items: &[CleanupPlanItemRefDto],
-) -> Result<CleanupPlanRecord, Response> {
+) -> HandlerResult<CleanupPlanRecord> {
     let candidates = resolve_cleanup_candidates(state, items)?;
     let preflights = candidates
         .iter()
@@ -1979,11 +1979,11 @@ fn build_cleanup_plan_record(
         })
         .collect::<Vec<_>>();
     if cleanup_paths_have_overlap(&lock_paths) {
-        return Err(error_response(
+        return Err(Box::new(error_response(
             StatusCode::BAD_REQUEST,
             "overlapping_cleanup_items",
             "cleanup plan contains overlapping paths",
-        ));
+        )));
     }
 
     Ok(CleanupPlanRecord {
@@ -2049,20 +2049,21 @@ async fn get_cleanup_recovery_inbox(State(state): State<AppState>, headers: Head
 fn resolve_cleanup_candidates(
     state: &AppState,
     items: &[CleanupPlanItemRefDto],
-) -> Result<Vec<CleanupCandidate>, Response> {
+) -> HandlerResult<Vec<CleanupCandidate>> {
     items
         .iter()
         .map(|item| {
             let session_id = parse_session_id(item.session_id().to_u128())
-                .ok_or_else(invalid_session_response)?;
+                .ok_or_else(|| Box::new(invalid_session_response()))?;
             let snapshot_id = parse_snapshot_id(item.snapshot_id().to_u128())
-                .ok_or_else(invalid_snapshot_response)?;
+                .ok_or_else(|| Box::new(invalid_snapshot_response()))?;
             let node_id =
-                parse_node_id(item.node_id().to_u64()).ok_or_else(invalid_node_response)?;
+                parse_node_id(item.node_id().to_u64())
+                    .ok_or_else(|| Box::new(invalid_node_response()))?;
             let record = state
                 .registry()
                 .node_record(session_id, snapshot_id, node_id)
-                .map_err(query_error_response)?;
+                .map_err(|error| Box::new(query_error_response(error)))?;
             Ok(CleanupCandidate {
                 item_ref: item.clone(),
                 display_name: record.name().to_string(),
