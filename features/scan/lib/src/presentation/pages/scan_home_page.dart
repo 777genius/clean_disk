@@ -2150,7 +2150,7 @@ class _DetailsPane extends StatelessWidget {
                         ),
                         _DetailLine(
                           label: l10n.detailsChildrenLabel,
-                          value: '${details.childIds.length}',
+                          value: '${details.summary.childCount}',
                         ),
                         _DetailLine(
                           label: l10n.detailsAccountingLabel,

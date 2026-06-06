@@ -14,9 +14,9 @@ pub mod wire;
 
 pub use capability::{
     CapabilityResponseDto, CapabilitySetDto, DistributionChannelDto, PackageModeDto,
-    PackagingProofDto, PermissionProbeDto, PermissionProbeRequestDto, PermissionProbeStatusDto,
-    PermissionRequiredActionDto, ProtocolLimitDto, RuntimePlatformDto, RuntimeProofDto,
-    ScannerCapabilityDto, ScannerIdentityProofDto, ScannerIdentityVerificationDto,
+    PackagingProofDto, PackagingProofDtoParts, PermissionProbeDto, PermissionProbeRequestDto,
+    PermissionProbeStatusDto, PermissionRequiredActionDto, ProtocolLimitDto, RuntimePlatformDto,
+    RuntimeProofDto, ScannerCapabilityDto, ScannerIdentityProofDto, ScannerIdentityVerificationDto,
     ScannerProcessKindDto, SupportLevelDto, UpdateSafetyDto,
 };
 pub use cleanup::{

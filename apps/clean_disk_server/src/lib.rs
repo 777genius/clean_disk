@@ -18,14 +18,14 @@ use clean_disk_protocol::{
     HardlinkPolicyDto, IssueCodeDto, IssueEvidenceDto, IssueSeverityDto, MeasuredQuantityDto,
     MeasuredQuantityResponseDto, NodeDetailsRequestDto, NodeDetailsResponseDto, NodeFlagsDto,
     NodeKindDto, NodePageItemDto, NodePageResponseDto, NodeTimestampsDto, OpaqueCursorDto,
-    PROTOCOL_VERSION, PackageModeDto, PackagingProofDto, PathPrivacyDto, PermissionProbeDto,
-    PermissionProbeRequestDto, PermissionProbeStatusDto, PermissionRequiredActionDto,
-    ProtocolLimitDto, RawPathDto, RestoreExpectationLevelDto, RuntimePlatformDto, RuntimeProofDto,
-    ScanEventDto, ScanEventEnvelopeDto, ScanIssueDto, ScanProgressDto, ScanSessionStatusDto,
-    ScanTargetDto, ScannerCapabilityDto, ScannerIdentityProofDto, ScannerIdentityVerificationDto,
-    ScannerProcessKindDto, SearchPageRequestDto, SessionStateDto, SizeConfidenceDto, SizeFactDto,
-    StartScanRequestDto, SupportLevelDto, TargetScopeDto, TopItemsKindDto, TopItemsRequestDto,
-    UpdateSafetyDto,
+    PROTOCOL_VERSION, PackageModeDto, PackagingProofDto, PackagingProofDtoParts, PathPrivacyDto,
+    PermissionProbeDto, PermissionProbeRequestDto, PermissionProbeStatusDto,
+    PermissionRequiredActionDto, ProtocolLimitDto, RawPathDto, RestoreExpectationLevelDto,
+    RuntimePlatformDto, RuntimeProofDto, ScanEventDto, ScanEventEnvelopeDto, ScanIssueDto,
+    ScanProgressDto, ScanSessionStatusDto, ScanTargetDto, ScannerCapabilityDto,
+    ScannerIdentityProofDto, ScannerIdentityVerificationDto, ScannerProcessKindDto,
+    SearchPageRequestDto, SessionStateDto, SizeConfidenceDto, SizeFactDto, StartScanRequestDto,
+    SupportLevelDto, TargetScopeDto, TopItemsKindDto, TopItemsRequestDto, UpdateSafetyDto,
 };
 use fs_usage_core::{
     BoundaryPolicy, ChildCompleteness, EvidenceConfidence, HardlinkPolicy, IssueCode,
@@ -56,13 +56,14 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
     },
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::broadcast;
 
 pub const LOCAL_AUTH_TOKEN_ENV: &str = "CLEAN_DISK_LOCAL_AUTH_TOKEN";
 const EVENTS_WEBSOCKET_SUBPROTOCOL: &str = "clean-disk-events-v1";
 const EVENTS_WEBSOCKET_TOKEN_PREFIX: &str = "clean-disk-token.";
+type HandlerResult<T> = Result<T, Box<Response>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServerConfigError {
@@ -231,12 +232,16 @@ struct AppStateInner {
 
 impl AppState {
     pub fn production() -> Result<Self, ServerConfigError> {
+        let budget = WorkerBudget::for_profile(ScanResourceProfile::Balanced);
         Ok(Self::new_with_cleanup(
             ServerConfig::local_from_env()?,
-            Arc::new(PduScannerBackend::default()),
+            Arc::new(PduScannerBackend::with_progress_emit_interval(
+                PduScannerBackend::DEFAULT_MAX_DEPTH,
+                Duration::from_millis(budget.progress_coalescing_ms()),
+            )),
             Arc::new(FileCleanupJournal::default_for_process()),
             Arc::new(OsTrashAdapter),
-            WorkerBudget::for_profile(ScanResourceProfile::Balanced),
+            budget,
         ))
     }
 
@@ -1584,12 +1589,12 @@ async fn create_cleanup_plan(
         request.items(),
     ) {
         Ok(command_id) => command_id,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let plan_id = state.cleanup_plans().allocate_plan_id();
     let plan = match build_cleanup_plan_record(&state, plan_id, command_id, request.items()) {
         Ok(plan) => plan,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     state.cleanup_plans().insert(plan.clone());
 
@@ -1611,7 +1616,7 @@ async fn execute_cleanup_plan(
         request.command_id(),
     ) {
         Ok(command_id) => command_id,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     if plan_id == 0 {
         return error_response(
@@ -1662,11 +1667,11 @@ async fn execute_cleanup(
         request.items(),
     ) {
         Ok(command_id) => command_id,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let plan = match build_cleanup_plan_record(&state, 0, command_id, request.items()) {
         Ok(plan) => plan,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
 
     execute_cleanup_record(&state, command_id, &plan)
@@ -2538,7 +2543,7 @@ fn packaging_proof_from(
     sandboxed: bool,
     limitations: Vec<String>,
 ) -> PackagingProofDto {
-    PackagingProofDto::new(
+    PackagingProofDto::new(PackagingProofDtoParts {
         distribution_channel,
         package_mode,
         sandboxed,
@@ -2546,8 +2551,12 @@ fn packaging_proof_from(
         debug_build,
         scanner_process,
         limitations,
-        UpdateSafetyDto::new(true, SupportLevelDto::Unknown, SupportLevelDto::Supported),
-    )
+        update_safety: UpdateSafetyDto::new(
+            true,
+            SupportLevelDto::Unknown,
+            SupportLevelDto::Supported,
+        ),
+    })
 }
 
 pub fn scan_only_packaging_smoke_report() -> ScanOnlyPackagingSmokeReport {
@@ -4495,16 +4504,20 @@ mod tests {
 
     #[test]
     fn scan_only_packaging_smoke_requires_update_quiesce_and_receipt_preservation() {
-        let packaging = PackagingProofDto::new(
-            DistributionChannelDto::Direct,
-            PackageModeDto::AppBundle,
-            false,
-            true,
-            false,
-            ScannerProcessKindDto::BundledHelper,
-            Vec::new(),
-            UpdateSafetyDto::new(false, SupportLevelDto::Unknown, SupportLevelDto::Unknown),
-        );
+        let packaging = PackagingProofDto::new(PackagingProofDtoParts {
+            distribution_channel: DistributionChannelDto::Direct,
+            package_mode: PackageModeDto::AppBundle,
+            sandboxed: false,
+            signed_build: true,
+            debug_build: false,
+            scanner_process: ScannerProcessKindDto::BundledHelper,
+            limitations: Vec::new(),
+            update_safety: UpdateSafetyDto::new(
+                false,
+                SupportLevelDto::Unknown,
+                SupportLevelDto::Unknown,
+            ),
+        });
 
         let helper_path =
             Path::new("/Applications/Clean Disk.app/Contents/Helpers/clean-disk-server");

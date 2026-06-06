@@ -173,26 +173,29 @@ pub struct PackagingProofDto {
     update_safety: UpdateSafetyDto,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackagingProofDtoParts {
+    pub distribution_channel: DistributionChannelDto,
+    pub package_mode: PackageModeDto,
+    pub sandboxed: bool,
+    pub signed_build: bool,
+    pub debug_build: bool,
+    pub scanner_process: ScannerProcessKindDto,
+    pub limitations: Vec<String>,
+    pub update_safety: UpdateSafetyDto,
+}
+
 impl PackagingProofDto {
-    pub fn new(
-        distribution_channel: DistributionChannelDto,
-        package_mode: PackageModeDto,
-        sandboxed: bool,
-        signed_build: bool,
-        debug_build: bool,
-        scanner_process: ScannerProcessKindDto,
-        limitations: Vec<String>,
-        update_safety: UpdateSafetyDto,
-    ) -> Self {
+    pub fn new(parts: PackagingProofDtoParts) -> Self {
         Self {
-            distribution_channel,
-            package_mode,
-            sandboxed,
-            signed_build,
-            debug_build,
-            scanner_process,
-            limitations,
-            update_safety,
+            distribution_channel: parts.distribution_channel,
+            package_mode: parts.package_mode,
+            sandboxed: parts.sandboxed,
+            signed_build: parts.signed_build,
+            debug_build: parts.debug_build,
+            scanner_process: parts.scanner_process,
+            limitations: parts.limitations,
+            update_safety: parts.update_safety,
         }
     }
 

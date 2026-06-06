@@ -25,11 +25,12 @@ use std::{
     time::Duration,
 };
 
-const PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(100);
+const DEFAULT_PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(100);
 
 #[derive(Debug)]
 pub struct PduScannerBackend {
     max_depth: u64,
+    progress_emit_interval: Duration,
     next_run_id: AtomicU64,
 }
 
@@ -37,8 +38,18 @@ impl PduScannerBackend {
     pub const DEFAULT_MAX_DEPTH: u64 = u64::MAX;
 
     pub fn new(max_depth: u64) -> Self {
+        Self::with_progress_emit_interval(max_depth, DEFAULT_PROGRESS_EMIT_INTERVAL)
+    }
+
+    pub fn with_progress_emit_interval(max_depth: u64, progress_emit_interval: Duration) -> Self {
+        let progress_emit_interval = if progress_emit_interval.is_zero() {
+            Duration::from_millis(1)
+        } else {
+            progress_emit_interval
+        };
         Self {
             max_depth,
+            progress_emit_interval,
             next_run_id: AtomicU64::new(1),
         }
     }
@@ -80,7 +91,7 @@ impl ScannerBackend for PduScannerBackend {
             let handle =
                 scope.spawn(|| build_pdu_tree(&root_path, device_boundary, max_depth, &reporter));
             while !handle.is_finished() {
-                thread::sleep(PROGRESS_EMIT_INTERVAL);
+                thread::sleep(self.progress_emit_interval);
                 if !cancellation.is_canceled() {
                     emit_progress_if_changed(
                         events,

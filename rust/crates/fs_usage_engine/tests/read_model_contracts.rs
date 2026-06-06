@@ -310,3 +310,37 @@ fn synthetic_large_tree_queries_do_not_require_full_tree_export() {
     assert_eq!(top.items.len(), 5);
     assert_eq!(top.items[0].name(), "file-49999");
 }
+
+#[test]
+fn node_details_child_ids_are_bounded_but_child_count_stays_complete() {
+    let child_count: usize = 1_500;
+    let children = (0..child_count)
+        .map(|index| {
+            DraftNode::new(
+                format!("child-{index:04}"),
+                NodeKind::File,
+                size(1),
+                ChildCompleteness::Complete,
+            )
+        })
+        .collect::<Vec<_>>();
+    let snapshot = publish(vec![
+        DraftNode::new(
+            "root",
+            NodeKind::Directory,
+            size(child_count as u64),
+            ChildCompleteness::Complete,
+        )
+        .with_children(children),
+    ]);
+
+    let details = snapshot
+        .node_details(NodeDetailsQuery::new(
+            snapshot.snapshot_id(),
+            snapshot.root_ids()[0],
+        ))
+        .expect("details");
+
+    assert_eq!(details.summary().child_count(), child_count);
+    assert_eq!(details.child_ids().len(), 1_024);
+}

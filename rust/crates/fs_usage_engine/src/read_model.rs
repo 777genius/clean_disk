@@ -4,6 +4,8 @@ use fs_usage_core::{
 };
 use std::path::{Path, PathBuf};
 
+const NODE_DETAILS_CHILD_IDS_LIMIT: usize = 1_024;
+
 #[derive(Debug, Clone)]
 pub struct DraftNode {
     name: String,
@@ -247,6 +249,10 @@ impl NodeDetails {
 pub struct NodeArena {
     nodes: Vec<NodeRecord>,
     root_ids: Vec<NodeId>,
+    search_names_lower: Vec<String>,
+    top_file_ids_by_size: Vec<NodeId>,
+    top_directory_ids_by_size: Vec<NodeId>,
+    top_file_and_directory_ids_by_size: Vec<NodeId>,
 }
 
 impl NodeArena {
@@ -265,6 +271,19 @@ impl NodeArena {
     pub fn node(&self, node_id: NodeId) -> Option<&NodeRecord> {
         let index = usize::try_from(node_id.get().checked_sub(1)?).ok()?;
         self.nodes.get(index).filter(|node| node.id == node_id)
+    }
+
+    fn search_name_lower(&self, node_id: NodeId) -> Option<&str> {
+        let index = usize::try_from(node_id.get().checked_sub(1)?).ok()?;
+        self.search_names_lower.get(index).map(String::as_str)
+    }
+
+    fn top_item_ids(&self, kind: TopItemsKind) -> &[NodeId] {
+        match kind {
+            TopItemsKind::Files => &self.top_file_ids_by_size,
+            TopItemsKind::Directories => &self.top_directory_ids_by_size,
+            TopItemsKind::FilesAndDirectories => &self.top_file_and_directory_ids_by_size,
+        }
     }
 }
 
@@ -305,7 +324,12 @@ impl ScanSnapshot {
         Ok(NodeDetails {
             summary: NodePageItem::from(record),
             source_path: record.source_path.clone(),
-            child_ids: record.child_ids.clone(),
+            child_ids: record
+                .child_ids
+                .iter()
+                .take(NODE_DETAILS_CHILD_IDS_LIMIT)
+                .copied()
+                .collect(),
             issues: record.issues.clone(),
         })
     }
@@ -324,7 +348,7 @@ impl ScanSnapshot {
         let offset = query.offset_for(self.snapshot_id, query_key)?;
         let mut child_ids = parent.child_ids.clone();
         self.sort_node_ids(&mut child_ids, query.sort);
-        self.page_node_ids(child_ids, offset, query.limit, query_key)
+        self.page_node_ids(&child_ids, offset, query.limit, query_key)
     }
 
     pub fn search_page(&self, query: SearchQuery) -> Result<Page<NodePageItem>, QueryFailure> {
@@ -341,11 +365,15 @@ impl ScanSnapshot {
             .arena
             .nodes
             .iter()
-            .filter(|node| node.name.to_lowercase().contains(&normalized))
+            .filter(|node| {
+                self.arena
+                    .search_name_lower(node.id)
+                    .is_some_and(|name| name.contains(&normalized))
+            })
             .map(|node| node.id)
             .collect::<Vec<_>>();
 
-        self.page_node_ids(matching_ids, offset, query.limit, query_key)
+        self.page_node_ids(&matching_ids, offset, query.limit, query_key)
     }
 
     pub fn top_items_page(&self, query: TopItemsQuery) -> Result<Page<NodePageItem>, QueryFailure> {
@@ -354,14 +382,7 @@ impl ScanSnapshot {
 
         let query_key = QueryFingerprint::top_items(query.kind);
         let offset = query.offset_for(self.snapshot_id, query_key)?;
-        let mut ids = self
-            .arena
-            .nodes
-            .iter()
-            .filter(|node| query.kind.matches(node.kind))
-            .map(|node| node.id)
-            .collect::<Vec<_>>();
-        self.sort_node_ids(&mut ids, ChildSort::SizeDesc);
+        let ids = self.arena.top_item_ids(query.kind);
 
         self.page_node_ids(ids, offset, query.limit, query_key)
     }
@@ -405,7 +426,7 @@ impl ScanSnapshot {
 
     fn page_node_ids(
         &self,
-        ids: Vec<NodeId>,
+        ids: &[NodeId],
         offset: usize,
         limit: usize,
         query_fingerprint: QueryFingerprint,
@@ -456,13 +477,80 @@ impl SnapshotPublicationGate {
             let root_id = flatten_node(root, None, &mut nodes).0;
             root_ids.push(root_id);
         }
+        let indexes = NodeArenaIndexes::build(&nodes);
 
         ScanSnapshot {
             snapshot_id,
-            arena: NodeArena { nodes, root_ids },
+            arena: NodeArena {
+                nodes,
+                root_ids,
+                search_names_lower: indexes.search_names_lower,
+                top_file_ids_by_size: indexes.top_file_ids_by_size,
+                top_directory_ids_by_size: indexes.top_directory_ids_by_size,
+                top_file_and_directory_ids_by_size: indexes.top_file_and_directory_ids_by_size,
+            },
             issues,
         }
     }
+}
+
+struct NodeArenaIndexes {
+    search_names_lower: Vec<String>,
+    top_file_ids_by_size: Vec<NodeId>,
+    top_directory_ids_by_size: Vec<NodeId>,
+    top_file_and_directory_ids_by_size: Vec<NodeId>,
+}
+
+impl NodeArenaIndexes {
+    fn build(nodes: &[NodeRecord]) -> Self {
+        let search_names_lower = nodes
+            .iter()
+            .map(|node| node.name.to_lowercase())
+            .collect::<Vec<_>>();
+        let mut top_file_ids_by_size = nodes
+            .iter()
+            .filter(|node| node.kind == NodeKind::File)
+            .map(|node| node.id)
+            .collect::<Vec<_>>();
+        let mut top_directory_ids_by_size = nodes
+            .iter()
+            .filter(|node| node.kind == NodeKind::Directory)
+            .map(|node| node.id)
+            .collect::<Vec<_>>();
+        let mut top_file_and_directory_ids_by_size = nodes
+            .iter()
+            .filter(|node| matches!(node.kind, NodeKind::File | NodeKind::Directory))
+            .map(|node| node.id)
+            .collect::<Vec<_>>();
+
+        sort_ids_by_size_desc(nodes, &mut top_file_ids_by_size);
+        sort_ids_by_size_desc(nodes, &mut top_directory_ids_by_size);
+        sort_ids_by_size_desc(nodes, &mut top_file_and_directory_ids_by_size);
+
+        Self {
+            search_names_lower,
+            top_file_ids_by_size,
+            top_directory_ids_by_size,
+            top_file_and_directory_ids_by_size,
+        }
+    }
+}
+
+fn sort_ids_by_size_desc(nodes: &[NodeRecord], ids: &mut [NodeId]) {
+    ids.sort_by(|left, right| {
+        let left = node_by_stable_id(nodes, *left).expect("id came from arena");
+        let right = node_by_stable_id(nodes, *right).expect("id came from arena");
+        right
+            .size
+            .raw_value()
+            .cmp(&left.size.raw_value())
+            .then_with(|| left.id.cmp(&right.id))
+    });
+}
+
+fn node_by_stable_id(nodes: &[NodeRecord], node_id: NodeId) -> Option<&NodeRecord> {
+    let index = usize::try_from(node_id.get().checked_sub(1)?).ok()?;
+    nodes.get(index).filter(|node| node.id == node_id)
 }
 
 fn flatten_node(
@@ -682,18 +770,6 @@ pub enum TopItemsKind {
     Files,
     Directories,
     FilesAndDirectories,
-}
-
-impl TopItemsKind {
-    fn matches(self, node_kind: NodeKind) -> bool {
-        match self {
-            Self::Files => node_kind == NodeKind::File,
-            Self::Directories => node_kind == NodeKind::Directory,
-            Self::FilesAndDirectories => {
-                matches!(node_kind, NodeKind::File | NodeKind::Directory)
-            }
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
