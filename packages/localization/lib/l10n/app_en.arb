@@ -218,6 +218,54 @@
   "@partialRowsText": {
     "description": "Localized string for partialRowsText."
   },
+  "diskUsageMapTitle": "Disk map",
+  "@diskUsageMapTitle": {
+    "description": "Title for the collapsible disk usage treemap panel."
+  },
+  "diskUsageMapDescription": "Largest visible scan items by size",
+  "@diskUsageMapDescription": {
+    "description": "Accessible description for the disk usage map."
+  },
+  "diskUsageMapEmptyTitle": "No map data",
+  "@diskUsageMapEmptyTitle": {
+    "description": "Empty title shown inside the disk usage map."
+  },
+  "diskUsageMapEmptyMessage": "Run a scan or open a folder with size data.",
+  "@diskUsageMapEmptyMessage": {
+    "description": "Empty message shown inside the disk usage map."
+  },
+  "diskUsageMapDataFallbackTitle": "Map data",
+  "@diskUsageMapDataFallbackTitle": {
+    "description": "Title for the accessible list fallback of disk usage map data."
+  },
+  "diskUsageMapUnsupportedRendererMessage": "This map renderer cannot display the current projection.",
+  "@diskUsageMapUnsupportedRendererMessage": {
+    "description": "Fallback message shown when the selected map renderer does not support the current projection."
+  },
+  "diskUsageMapRenderFailureMessage": "The map could not be rendered, showing data list instead.",
+  "@diskUsageMapRenderFailureMessage": {
+    "description": "Fallback message shown when the map renderer throws during build."
+  },
+  "diskUsageMapStalePrefix": "Stale",
+  "@diskUsageMapStalePrefix": {
+    "description": "Short accessible prefix for stale disk usage map data."
+  },
+  "diskUsageMapWarningPrefix": "Warning",
+  "@diskUsageMapWarningPrefix": {
+    "description": "Short accessible prefix for disk usage map warnings."
+  },
+  "diskUsageMapOtherLabel": "Other",
+  "@diskUsageMapOtherLabel": {
+    "description": "Label for the grouped remainder tile in the disk usage map."
+  },
+  "diskUsageMapExpandAction": "Expand disk map",
+  "@diskUsageMapExpandAction": {
+    "description": "Tooltip for expanding the disk usage map panel."
+  },
+  "diskUsageMapCollapseAction": "Collapse disk map",
+  "@diskUsageMapCollapseAction": {
+    "description": "Tooltip for collapsing the disk usage map panel."
+  },
   "revealAction": "Reveal",
   "@revealAction": {
     "description": "Localized string for revealAction."

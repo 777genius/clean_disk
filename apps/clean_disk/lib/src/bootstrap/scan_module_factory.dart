@@ -1,5 +1,6 @@
 import 'package:clean_disk_scan/clean_disk_scan.dart';
 import 'package:clean_disk_scan/clean_disk_scan_data.dart';
+import 'package:syncfusion_disk_usage_map_adapter/syncfusion_disk_usage_map_adapter.dart';
 
 import 'default_scan_target_path.dart';
 import 'path_revealer.dart';
@@ -23,12 +24,16 @@ const _scanTargetScope = String.fromEnvironment(
   'CLEAN_DISK_SCAN_TARGET_SCOPE',
   defaultValue: 'volume',
 );
+const _diskUsageMapRenderer = SyncfusionDiskUsageMapRenderer();
 
 ScanModule createScanModule() {
   final config = _createWorkspaceConfig();
   return switch (_scanBackend) {
     'fake' => _createFakeScanModule(config),
-    'daemon' => createDaemonScanModule(config),
+    'daemon' => createDaemonScanModule(
+      config,
+      diskUsageMapRenderer: _diskUsageMapRenderer,
+    ),
     final backend => throw UnsupportedError(
       'Unsupported scan backend: $backend',
     ),
@@ -39,6 +44,7 @@ ScanModule _createFakeScanModule(ScanWorkspaceConfig config) {
   final fixture = FakeScanFeatureFixture();
   return ScanModule(
     config: config,
+    diskUsageMapRenderer: _diskUsageMapRenderer,
     useCases: ScanUseCaseBundle.fromPorts(
       repository: fixture.repository,
       eventClient: fixture.eventClient,

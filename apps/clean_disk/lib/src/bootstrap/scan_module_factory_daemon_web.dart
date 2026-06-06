@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:js_interop';
 
 import 'package:clean_disk_core/clean_disk_core.dart';
+import 'package:clean_disk_design_system/clean_disk_design_system.dart';
 import 'package:clean_disk_network/clean_disk_network.dart';
 import 'package:clean_disk_scan/clean_disk_scan.dart';
 import 'package:clean_disk_scan/clean_disk_scan_data.dart';
@@ -25,7 +26,10 @@ const _localAuthToken = String.fromEnvironment(
 const _eventsWebSocketSubprotocol = 'clean-disk-events-v1';
 const _eventsWebSocketTokenPrefix = 'clean-disk-token.';
 
-ScanModule createDaemonScanModule(ScanWorkspaceConfig config) {
+ScanModule createDaemonScanModule(
+  ScanWorkspaceConfig config, {
+  DiskUsageMapRenderer? diskUsageMapRenderer,
+}) {
   final environment = AppEnvironment.fromValues(
     flavor: 'development',
     apiBaseUrl: _daemonBaseUrl,
@@ -63,6 +67,7 @@ ScanModule createDaemonScanModule(ScanWorkspaceConfig config) {
 
   return ScanModule(
     config: config,
+    diskUsageMapRenderer: diskUsageMapRenderer,
     useCases: ScanUseCaseBundle.fromPorts(
       repository: repository,
       eventClient: eventClient,

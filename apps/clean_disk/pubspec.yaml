@@ -23,6 +23,7 @@ dependencies:
   clean_disk_localization: any
   clean_disk_network: any
   clean_disk_scan: any
+  syncfusion_disk_usage_map_adapter: any
   marionette_flutter: ^0.5.0
 
 dev_dependencies:

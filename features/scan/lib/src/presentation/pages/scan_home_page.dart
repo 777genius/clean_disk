@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:clean_disk_design_system/clean_disk_design_system.dart';
 import 'package:clean_disk_localization/clean_disk_localization.dart';
@@ -14,10 +15,12 @@ class ScanHomePage extends StatefulWidget {
     super.key,
     required this.store,
     this.config = const ScanWorkspaceConfig(),
+    this.diskUsageMapRenderer,
   });
 
   final ScanWorkspaceStore store;
   final ScanWorkspaceConfig config;
+  final DiskUsageMapRenderer? diskUsageMapRenderer;
 
   @override
   State<ScanHomePage> createState() => _ScanHomePageState();
@@ -41,6 +44,7 @@ class _ScanHomePageState extends State<ScanHomePage> {
   var _targetHydrated = false;
   var _targetChooserVisible = false;
   var _detailsPaneCollapsed = false;
+  var _diskUsageMapCollapsed = false;
   var _uiRefreshScheduled = false;
   var _searchSequence = 0;
   var _lastSubmittedSearchText = '';
@@ -100,10 +104,13 @@ class _ScanHomePageState extends State<ScanHomePage> {
           canScan: _canRunScan,
           showTargetChooser: _targetChooserVisible,
           detailsPaneCollapsed: _detailsPaneCollapsed,
+          diskUsageMapRenderer: widget.diskUsageMapRenderer,
+          diskUsageMapCollapsed: _diskUsageMapCollapsed,
           onScan: _canRunScan ? () => _startScan(widget.store) : null,
           onPause: () => _cancelScan(widget.store),
           onPickTarget: () => unawaited(_pickScanTarget(widget.store)),
           onToggleDetailsPane: _toggleDetailsPane,
+          onToggleDiskUsageMap: _toggleDiskUsageMap,
           onChooseTarget: (choice) =>
               unawaited(_selectScanTarget(widget.store, choice.target)),
           onChooseFolderTarget: () =>
@@ -134,6 +141,12 @@ class _ScanHomePageState extends State<ScanHomePage> {
       baseOffset: 0,
       extentOffset: _searchController.text.length,
     );
+  }
+
+  void _toggleDiskUsageMap() {
+    setState(() {
+      _diskUsageMapCollapsed = !_diskUsageMapCollapsed;
+    });
   }
 
   bool get _canRunScan {
@@ -351,6 +364,7 @@ class _ScanHomePageState extends State<ScanHomePage> {
     });
     await store.saveLastScanTarget(target);
     await store.probeTargetPermission(target);
+    await store.loadTargetChoices();
     _markStoreChanged();
   }
 
@@ -797,10 +811,13 @@ class ScanWorkspaceView extends StatelessWidget {
     required this.canScan,
     required this.showTargetChooser,
     required this.detailsPaneCollapsed,
+    required this.diskUsageMapCollapsed,
+    this.diskUsageMapRenderer,
     required this.onScan,
     required this.onPause,
     required this.onPickTarget,
     required this.onToggleDetailsPane,
+    required this.onToggleDiskUsageMap,
     required this.onChooseTarget,
     required this.onChooseFolderTarget,
     required this.onPermissionProbe,
@@ -823,10 +840,13 @@ class ScanWorkspaceView extends StatelessWidget {
   final bool canScan;
   final bool showTargetChooser;
   final bool detailsPaneCollapsed;
+  final bool diskUsageMapCollapsed;
+  final DiskUsageMapRenderer? diskUsageMapRenderer;
   final VoidCallback? onScan;
   final VoidCallback onPause;
   final VoidCallback onPickTarget;
   final VoidCallback onToggleDetailsPane;
+  final VoidCallback onToggleDiskUsageMap;
   final ValueChanged<ScanTargetChoice> onChooseTarget;
   final VoidCallback onChooseFolderTarget;
   final VoidCallback onPermissionProbe;
@@ -866,8 +886,12 @@ class ScanWorkspaceView extends StatelessWidget {
                       scanActionLabel: scanActionLabel,
                       canSearch: store.hasReadableSnapshot,
                       canSort: store.visibleRows.isNotEmpty,
+                      canPickTarget:
+                          store.canPickScanTarget &&
+                          store.sessionStatus?.state != SessionState.running,
                       canScan: canScan,
                       onScan: onScan,
+                      onPickTarget: onPickTarget,
                       onPause: onPause,
                       canCancelScan: store.canCancelScan,
                       onSearchChanged: onSearchChanged,
@@ -889,6 +913,9 @@ class ScanWorkspaceView extends StatelessWidget {
                               onRefreshFolderTarget: onRefreshFolderTarget,
                               onClearSearch: onClearSearch,
                               onStoreChanged: onStoreChanged,
+                              diskUsageMapRenderer: diskUsageMapRenderer,
+                              diskUsageMapCollapsed: diskUsageMapCollapsed,
+                              onToggleDiskUsageMap: onToggleDiskUsageMap,
                             )
                           : _WideWorkspace(
                               store: store,
@@ -903,6 +930,10 @@ class ScanWorkspaceView extends StatelessWidget {
                               onRefreshFolderTarget: onRefreshFolderTarget,
                               onClearSearch: onClearSearch,
                               onStoreChanged: onStoreChanged,
+                              onChooseTarget: onChooseTarget,
+                              diskUsageMapRenderer: diskUsageMapRenderer,
+                              diskUsageMapCollapsed: diskUsageMapCollapsed,
+                              onToggleDiskUsageMap: onToggleDiskUsageMap,
                               detailsPaneCollapsed: detailsPaneCollapsed,
                               onToggleDetailsPane: onToggleDetailsPane,
                             ),
@@ -1206,6 +1237,10 @@ class _WideWorkspace extends StatelessWidget {
     required this.onRefreshFolderTarget,
     required this.onClearSearch,
     required this.onStoreChanged,
+    required this.onChooseTarget,
+    required this.diskUsageMapRenderer,
+    required this.diskUsageMapCollapsed,
+    required this.onToggleDiskUsageMap,
     required this.detailsPaneCollapsed,
     required this.onToggleDetailsPane,
   });
@@ -1226,6 +1261,10 @@ class _WideWorkspace extends StatelessWidget {
   final ValueChanged<ScanTarget> onRefreshFolderTarget;
   final VoidCallback onClearSearch;
   final VoidCallback onStoreChanged;
+  final ValueChanged<ScanTargetChoice> onChooseTarget;
+  final DiskUsageMapRenderer? diskUsageMapRenderer;
+  final bool diskUsageMapCollapsed;
+  final VoidCallback onToggleDiskUsageMap;
   final bool detailsPaneCollapsed;
   final VoidCallback onToggleDetailsPane;
 
@@ -1245,6 +1284,7 @@ class _WideWorkspace extends StatelessWidget {
             activeTarget: activeTarget,
             canChangeTarget: canChangeTarget,
             onPickTarget: onPickTarget,
+            onChooseTarget: onChooseTarget,
             onPermissionProbe: onPermissionProbe,
             onPermissionRepair: onPermissionRepair,
           ),
@@ -1257,6 +1297,18 @@ class _WideWorkspace extends StatelessWidget {
               children: [
                 if (_shouldShowMetricStrip(store)) ...[
                   _MetricStrip(store: store),
+                  const SizedBox(height: 8),
+                ],
+                if (_shouldShowDiskUsageMap(store, diskUsageMapRenderer)) ...[
+                  _DiskUsageMapPanel(
+                    store: store,
+                    activeTarget: activeTarget,
+                    renderer: diskUsageMapRenderer!,
+                    collapsed: diskUsageMapCollapsed,
+                    compact: false,
+                    onToggle: onToggleDiskUsageMap,
+                    onStoreChanged: onStoreChanged,
+                  ),
                   const SizedBox(height: 8),
                 ],
                 Expanded(
@@ -1318,6 +1370,9 @@ class _CompactWorkspace extends StatelessWidget {
     required this.onRefreshFolderTarget,
     required this.onClearSearch,
     required this.onStoreChanged,
+    required this.diskUsageMapRenderer,
+    required this.diskUsageMapCollapsed,
+    required this.onToggleDiskUsageMap,
   });
 
   final ScanWorkspaceStore store;
@@ -1332,11 +1387,16 @@ class _CompactWorkspace extends StatelessWidget {
   final ValueChanged<ScanTarget> onRefreshFolderTarget;
   final VoidCallback onClearSearch;
   final VoidCallback onStoreChanged;
+  final DiskUsageMapRenderer? diskUsageMapRenderer;
+  final bool diskUsageMapCollapsed;
+  final VoidCallback onToggleDiskUsageMap;
 
   @override
   Widget build(BuildContext context) {
     final showDetailsPane =
         store.hasReadableSnapshot || store.selectedNodeId != null;
+    final viewportHeight = MediaQuery.sizeOf(context).height;
+    final treeHeight = math.max(620.0, viewportHeight * 0.68);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
@@ -1358,8 +1418,20 @@ class _CompactWorkspace extends StatelessWidget {
             _MetricStrip(store: store),
             const SizedBox(height: 10),
           ],
+          if (_shouldShowDiskUsageMap(store, diskUsageMapRenderer)) ...[
+            _DiskUsageMapPanel(
+              store: store,
+              activeTarget: activeTarget,
+              renderer: diskUsageMapRenderer!,
+              collapsed: diskUsageMapCollapsed,
+              compact: true,
+              onToggle: onToggleDiskUsageMap,
+              onStoreChanged: onStoreChanged,
+            ),
+            const SizedBox(height: 10),
+          ],
           SizedBox(
-            height: 500,
+            height: treeHeight,
             child: _NodeTable(
               store: store,
               activeTarget: activeTarget,
@@ -1386,6 +1458,166 @@ class _CompactWorkspace extends StatelessWidget {
   }
 }
 
+class _DiskUsageMapPanel extends StatelessWidget {
+  const _DiskUsageMapPanel({
+    required this.store,
+    required this.activeTarget,
+    required this.renderer,
+    required this.collapsed,
+    required this.compact,
+    required this.onToggle,
+    required this.onStoreChanged,
+  });
+
+  final ScanWorkspaceStore store;
+  final ScanTarget activeTarget;
+  final DiskUsageMapRenderer renderer;
+  final bool collapsed;
+  final bool compact;
+  final VoidCallback onToggle;
+  final VoidCallback onStoreChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.cleanDiskL10n;
+    final projection = _diskUsageMapProjection(
+      l10n: l10n,
+      store: store,
+      activeTarget: activeTarget,
+    );
+    if (projection == null) {
+      return const SizedBox.shrink();
+    }
+
+    final toggleLabel = collapsed
+        ? l10n.diskUsageMapExpandAction
+        : l10n.diskUsageMapCollapseAction;
+
+    return Container(
+      key: const ValueKey('scan-disk-usage-map-panel'),
+      decoration: _panelDecoration,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 9, 8, 9),
+            child: Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    key: const ValueKey('scan-disk-usage-map-toggle-action'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onToggle,
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.grid_view_rounded,
+                          color: _ScanColors.cyan,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                l10n.diskUsageMapTitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.labelLarge
+                                    ?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0,
+                                    ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _diskUsageMapSummaryText(
+                                  l10n,
+                                  projection,
+                                  store.diskUsageMapFocusNode,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: _ScanColors.textSoft,
+                                      letterSpacing: 0,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                IconButton(
+                  key: const ValueKey('scan-disk-usage-map-toggle-button'),
+                  tooltip: toggleLabel,
+                  onPressed: onToggle,
+                  color: _ScanColors.textSoft,
+                  iconSize: 24,
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 32,
+                    height: 32,
+                  ),
+                  icon: Icon(
+                    collapsed
+                        ? Icons.keyboard_arrow_down_rounded
+                        : Icons.keyboard_arrow_up_rounded,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            child: collapsed
+                ? const SizedBox.shrink()
+                : Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                    child: SizedBox(
+                      height: compact ? 260 : 320,
+                      child: DiskUsageMapView(
+                        projection: projection,
+                        renderer: renderer,
+                        labels: _diskUsageMapLabels(l10n),
+                        style: _diskUsageMapStyle,
+                        selectedNodeId: store.selectedNodeId?.value,
+                        focusedNodeId: store.diskUsageMapFocusNodeId?.value,
+                        onTileSelected: (tile) =>
+                            _selectDiskUsageMapTile(tile, store),
+                        onTileActivated: (tile) =>
+                            _selectDiskUsageMapTile(tile, store),
+                        dataFallbackMaxItems: compact ? 8 : 12,
+                      ),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _selectDiskUsageMapTile(
+    DiskUsageMapTile tile,
+    ScanWorkspaceStore store,
+  ) {
+    if (!_isSelectableDiskUsageMapTile(tile)) {
+      return;
+    }
+
+    final nodeId = NodeId(tile.nodeId);
+    store.toggleDiskUsageMapFocus(nodeId);
+    unawaited(store.selectNode(nodeId).whenComplete(onStoreChanged));
+  }
+}
+
 class _TopBar extends StatelessWidget {
   const _TopBar({
     required this.compact,
@@ -1398,8 +1630,10 @@ class _TopBar extends StatelessWidget {
     required this.scanActionLabel,
     required this.canSearch,
     required this.canSort,
+    required this.canPickTarget,
     required this.canScan,
     required this.onScan,
+    required this.onPickTarget,
     required this.onPause,
     required this.canCancelScan,
     required this.onSearchChanged,
@@ -1417,8 +1651,10 @@ class _TopBar extends StatelessWidget {
   final String scanActionLabel;
   final bool canSearch;
   final bool canSort;
+  final bool canPickTarget;
   final bool canScan;
   final VoidCallback? onScan;
+  final VoidCallback onPickTarget;
   final VoidCallback onPause;
   final bool canCancelScan;
   final ValueChanged<String> onSearchChanged;
@@ -1505,7 +1741,10 @@ class _TopBar extends StatelessWidget {
                 const _WindowChromeInset(compact: false),
                 const _AppTitle(),
                 const SizedBox(width: 18),
-                _Breadcrumb(target: activeTarget),
+                _Breadcrumb(
+                  target: activeTarget,
+                  onTap: canPickTarget ? onPickTarget : null,
+                ),
                 const SizedBox(width: 16),
                 _PrimaryActionButton(
                   key: const ValueKey('scan-toolbar-scan-action'),
@@ -1621,6 +1860,7 @@ class _TargetRail extends StatelessWidget {
     required this.activeTarget,
     required this.canChangeTarget,
     required this.onPickTarget,
+    required this.onChooseTarget,
     required this.onPermissionProbe,
     required this.onPermissionRepair,
   });
@@ -1629,11 +1869,15 @@ class _TargetRail extends StatelessWidget {
   final ScanTarget activeTarget;
   final bool canChangeTarget;
   final VoidCallback onPickTarget;
+  final ValueChanged<ScanTargetChoice> onChooseTarget;
   final VoidCallback onPermissionProbe;
   final VoidCallback onPermissionRepair;
 
   @override
   Widget build(BuildContext context) {
+    final choices = _railTargetChoices(store.targetChoices, activeTarget);
+    final canChoosePresetTarget =
+        store.sessionStatus?.state != SessionState.running;
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 18, 14, 14),
       child: SingleChildScrollView(
@@ -1643,15 +1887,30 @@ class _TargetRail extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _TargetItem(
+                itemKey: const ValueKey('scan-target-current'),
+                actionKey: const ValueKey('scan-target-picker-action'),
                 icon: Icons.folder_open_outlined,
                 label: _targetDisplayName(activeTarget),
-                size: _shouldShowMetricStrip(store)
-                    ? _formatRowsSize(_summaryRows(store))
-                    : null,
+                size: _metricSummarySizeText(store),
                 selected: true,
                 onTap: canChangeTarget ? onPickTarget : null,
-                trailing: canChangeTarget ? const _TargetPickIndicator() : null,
               ),
+              if (choices.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                for (final choice in choices)
+                  _TargetItem(
+                    itemKey: ValueKey('scan-target-choice-${choice.id}'),
+                    actionKey: ValueKey(
+                      'scan-target-choice-action-${choice.id}',
+                    ),
+                    icon: _targetChoiceIcon(choice.kind),
+                    label: _targetChoiceLabel(context.cleanDiskL10n, choice),
+                    selected: false,
+                    onTap: canChoosePresetTarget
+                        ? () => onChooseTarget(choice)
+                        : null,
+                  ),
+              ],
               const SizedBox(height: 12),
               _PermissionProofCard(
                 proof: store.runtimeProof,
@@ -1688,7 +1947,6 @@ class _TargetChips extends StatelessWidget {
       label: _targetDisplayName(activeTarget),
       selected: true,
       onTap: canChangeTarget ? onPickTarget : null,
-      trailing: canChangeTarget ? const _TargetPickIndicator() : null,
     );
   }
 }
@@ -1701,13 +1959,15 @@ class _MetricStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.cleanDiskL10n;
-    final rows = _summaryRows(store);
-    final largest = rows.isEmpty ? null : rows.first;
+    final summary = _metricSummary(store);
+    final largest = summary.largest;
     final scannedItems = store.progress?.scannedItems;
     final cells = [
       _MetricCell(
         label: l10n.totalScannedLabel,
-        value: _formatRowsSize(rows),
+        value: summary.totalSize == null
+            ? l10n.metricNoDataValue
+            : _formatBytes(summary.totalSize!),
         subtitle: scannedItems == null
             ? l10n.metricNoDataValue
             : '$scannedItems ${l10n.filesCountSuffix}',
@@ -1723,50 +1983,20 @@ class _MetricStrip extends StatelessWidget {
         accent: _ScanColors.violet,
         icon: Icons.folder,
       ),
-      _MetricCell(
-        label: l10n.cleanupCandidatesLabel,
-        value: _formatBytes(store.queuedBytes),
-        subtitle: l10n.metricCleanupReviewSubtitle,
-        accent: _ScanColors.cyan,
-        icon: Icons.playlist_add_check_outlined,
-      ),
-      _MetricCell(
-        label: l10n.skippedLabel,
-        value: '${_issueCount(rows)}',
-        subtitle: l10n.metricSkippedProtectedSubtitle,
-        accent: _ScanColors.yellow,
-        icon: Icons.warning_amber_outlined,
-      ),
     ];
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 720;
+        final stacked = constraints.maxWidth < 520;
         return Container(
-          height: compact ? 168 : 84,
+          height: stacked ? 128 : 64,
           decoration: _panelDecoration,
-          child: compact
+          child: stacked
               ? Column(
                   children: [
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Expanded(child: cells[0]),
-                          const _Divider.vertical(),
-                          Expanded(child: cells[1]),
-                        ],
-                      ),
-                    ),
+                    Expanded(child: cells[0]),
                     const _Divider.horizontal(),
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Expanded(child: cells[2]),
-                          const _Divider.vertical(),
-                          Expanded(child: cells[3]),
-                        ],
-                      ),
-                    ),
+                    Expanded(child: cells[1]),
                   ],
                 )
               : Row(
@@ -1774,10 +2004,6 @@ class _MetricStrip extends StatelessWidget {
                     Expanded(child: cells[0]),
                     const _Divider.vertical(),
                     Expanded(child: cells[1]),
-                    const _Divider.vertical(),
-                    Expanded(child: cells[2]),
-                    const _Divider.vertical(),
-                    Expanded(child: cells[3]),
                   ],
                 ),
         );
@@ -1902,6 +2128,7 @@ class _NodeTable extends StatelessWidget {
 
   Future<void> _selectAndMaybeToggle(AppTreeTableRow row) async {
     final nodeId = NodeId(row.id);
+    store.clearDiskUsageMapFocus();
     await store.selectNode(nodeId);
     if (store.viewport.mode == ScanQueryMode.children && row.hasChildren) {
       await store.toggleTreeNode(nodeId);
@@ -1928,6 +2155,7 @@ class _NodeTable extends StatelessWidget {
       return;
     }
 
+    store.clearDiskUsageMapFocus();
     await store.selectNode(nodeId);
     if (!context.mounted) {
       return;
@@ -3036,34 +3264,35 @@ class _MetricCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       child: Row(
         children: [
-          Icon(icon, color: accent, size: 28),
-          const SizedBox(width: 14),
+          Icon(icon, color: accent, size: 24),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _SectionCaption(label.toUpperCase()),
-                const SizedBox(height: 6),
+                const SizedBox(height: 3),
                 Text(
                   value,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: accent,
+                    fontSize: 15,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0,
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 1),
                 Text(
                   subtitle,
                   overflow: TextOverflow.ellipsis,
                   style: _bodyStyle(
                     context,
-                  ).copyWith(color: _ScanColors.textSoft),
+                  ).copyWith(color: _ScanColors.textSoft, fontSize: 12),
                 ),
               ],
             ),
@@ -3074,75 +3303,108 @@ class _MetricCell extends StatelessWidget {
   }
 }
 
-class _TargetItem extends StatelessWidget {
+class _TargetItem extends StatefulWidget {
   const _TargetItem({
+    required this.itemKey,
     required this.icon,
     required this.label,
+    this.actionKey,
     this.size,
     this.selected = false,
     this.onTap,
-    this.trailing,
   });
 
+  final Key itemKey;
+  final Key? actionKey;
   final IconData icon;
   final String label;
   final String? size;
   final bool selected;
   final VoidCallback? onTap;
-  final Widget? trailing;
+
+  @override
+  State<_TargetItem> createState() => _TargetItemState();
+}
+
+class _TargetItemState extends State<_TargetItem> {
+  bool _hovered = false;
+
+  void _setHovered(bool value) {
+    if (_hovered == value) {
+      return;
+    }
+    setState(() {
+      _hovered = value;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    final isInteractive = widget.onTap != null;
+    final backgroundColor = widget.selected
+        ? (_hovered && isInteractive
+              ? _ScanColors.selectedSoft.withValues(alpha: 0.92)
+              : _ScanColors.selectedSoft)
+        : (_hovered && isInteractive
+              ? _ScanColors.selectedSoft.withValues(alpha: 0.52)
+              : Colors.transparent);
+    final borderColor = _hovered && isInteractive
+        ? _ScanColors.cyan.withValues(alpha: 0.58)
+        : _ScanColors.border;
     final content = Container(
-      key: const ValueKey('scan-target-current'),
+      key: widget.itemKey,
       height: 42,
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: selected ? _ScanColors.selectedSoft : Colors.transparent,
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(8),
-        border: selected ? Border.all(color: _ScanColors.border) : null,
+        border: widget.selected || (_hovered && isInteractive)
+            ? Border.all(color: borderColor)
+            : null,
       ),
       child: Row(
         children: [
           Icon(
-            icon,
+            widget.icon,
             size: 22,
-            color: selected ? _ScanColors.cyan : Colors.white,
+            color: widget.selected ? _ScanColors.cyan : Colors.white,
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              label,
+              widget.label,
               overflow: TextOverflow.ellipsis,
               style: _bodyStyle(
                 context,
               ).copyWith(color: Colors.white, fontWeight: FontWeight.w700),
             ),
           ),
-          if (size case final size?) ...[
+          if (widget.size case final size?) ...[
             const SizedBox(width: 8),
             Text(size, style: _monoStyle(context)),
-          ],
-          if (trailing case final trailing?) ...[
-            const SizedBox(width: 8),
-            trailing,
           ],
         ],
       ),
     );
-    if (onTap == null) {
+    if (!isInteractive) {
       return content;
     }
-    return Tooltip(
-      message: context.cleanDiskL10n.targetChangeAction,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => _setHovered(true),
+      onExit: (_) => _setHovered(false),
       child: Material(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
-          key: const ValueKey('scan-target-picker-action'),
-          onTap: onTap,
+          key: widget.actionKey,
+          onTap: widget.onTap,
           borderRadius: BorderRadius.circular(8),
+          focusColor: _ScanColors.cyan.withValues(alpha: 0.10),
+          highlightColor: _ScanColors.cyan.withValues(alpha: 0.08),
+          hoverColor: Colors.transparent,
+          splashColor: _ScanColors.cyan.withValues(alpha: 0.12),
           child: content,
         ),
       ),
@@ -3150,96 +3412,108 @@ class _TargetItem extends StatelessWidget {
   }
 }
 
-class _TargetPickIndicator extends StatelessWidget {
-  const _TargetPickIndicator();
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 32,
-      height: 32,
-      child: Icon(
-        Icons.keyboard_arrow_down_rounded,
-        size: 20,
-        color: _ScanColors.cyan,
-      ),
-    );
-  }
-}
-
-class _ChipTarget extends StatelessWidget {
+class _ChipTarget extends StatefulWidget {
   const _ChipTarget({
     required this.icon,
     required this.label,
     this.selected = false,
     this.onTap,
-    this.trailing,
   });
 
   final IconData icon;
   final String label;
   final bool selected;
   final VoidCallback? onTap;
-  final Widget? trailing;
+
+  @override
+  State<_ChipTarget> createState() => _ChipTargetState();
+}
+
+class _ChipTargetState extends State<_ChipTarget> {
+  bool _hovered = false;
+
+  void _setHovered(bool value) {
+    if (_hovered == value) {
+      return;
+    }
+    setState(() {
+      _hovered = value;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    final isInteractive = widget.onTap != null;
+    final backgroundColor = widget.selected
+        ? (_hovered && isInteractive
+              ? _ScanColors.selectedSoft.withValues(alpha: 0.92)
+              : _ScanColors.selectedSoft)
+        : (_hovered && isInteractive
+              ? _ScanColors.selectedSoft.withValues(alpha: 0.52)
+              : _ScanColors.panel);
     final content = Container(
-      key: onTap == null && selected
+      key: widget.onTap == null && widget.selected
           ? const ValueKey('scan-target-chip-current')
           : null,
       height: 42,
       decoration: BoxDecoration(
-        color: selected ? _ScanColors.selectedSoft : _ScanColors.panel,
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: selected ? _ScanColors.cyan : _ScanColors.border,
+          color: _hovered && isInteractive
+              ? _ScanColors.cyan.withValues(alpha: 0.74)
+              : widget.selected
+              ? _ScanColors.cyan
+              : _ScanColors.border,
         ),
       ),
       child: Row(
         children: [
           const SizedBox(width: 12),
           Icon(
-            icon,
-            color: selected ? _ScanColors.cyan : Colors.white,
+            widget.icon,
+            color: widget.selected ? _ScanColors.cyan : Colors.white,
             size: 20,
           ),
           const SizedBox(width: 8),
           Flexible(
             child: Text(
-              label,
+              widget.label,
               overflow: TextOverflow.ellipsis,
               style: _bodyStyle(context).copyWith(
-                color: selected ? _ScanColors.cyan : Colors.white,
+                color: widget.selected ? _ScanColors.cyan : Colors.white,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
-          if (trailing case final trailing?) ...[
-            const SizedBox(width: 8),
-            trailing,
-          ],
           const SizedBox(width: 8),
         ],
       ),
     );
-    if (onTap == null) {
+    if (!isInteractive) {
       return content;
     }
 
-    final chip = Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        key: selected ? const ValueKey('scan-target-chip-current') : null,
-        onTap: onTap,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => _setHovered(true),
+      onExit: (_) => _setHovered(false),
+      child: Material(
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(8),
-        child: content,
+        child: InkWell(
+          key: widget.selected
+              ? const ValueKey('scan-target-chip-current')
+              : null,
+          onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(8),
+          focusColor: _ScanColors.cyan.withValues(alpha: 0.10),
+          highlightColor: _ScanColors.cyan.withValues(alpha: 0.08),
+          hoverColor: Colors.transparent,
+          splashColor: _ScanColors.cyan.withValues(alpha: 0.12),
+          child: content,
+        ),
       ),
-    );
-    return Tooltip(
-      message: context.cleanDiskL10n.targetChangeAction,
-      child: chip,
     );
   }
 }
@@ -3278,7 +3552,8 @@ class _DriveSummary extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            _formatRowsSize(_summaryRows(store)),
+            _metricSummarySizeText(store) ??
+                context.cleanDiskL10n.metricNoDataValue,
             style: _monoStyle(context).copyWith(color: _ScanColors.textSoft),
           ),
           const SizedBox(height: 4),
@@ -4779,25 +5054,49 @@ class _AppTitle extends StatelessWidget {
   }
 }
 
-class _Breadcrumb extends StatelessWidget {
-  const _Breadcrumb({required this.target});
+class _Breadcrumb extends StatefulWidget {
+  const _Breadcrumb({required this.target, this.onTap});
 
   final ScanTarget target;
+  final VoidCallback? onTap;
+
+  @override
+  State<_Breadcrumb> createState() => _BreadcrumbState();
+}
+
+class _BreadcrumbState extends State<_Breadcrumb> {
+  bool _hovered = false;
+
+  void _setHovered(bool value) {
+    if (_hovered == value) {
+      return;
+    }
+    setState(() {
+      _hovered = value;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final isInteractive = widget.onTap != null;
+    final content = Container(
       key: const ValueKey('scan-target-breadcrumb'),
       height: 36,
       constraints: const BoxConstraints(maxWidth: 230),
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: _ScanColors.input,
-        border: Border.all(color: _ScanColors.border),
+        color: _hovered && isInteractive
+            ? _ScanColors.selectedSoft.withValues(alpha: 0.56)
+            : _ScanColors.input,
+        border: Border.all(
+          color: _hovered && isInteractive
+              ? _ScanColors.cyan.withValues(alpha: 0.72)
+              : _ScanColors.border,
+        ),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Tooltip(
-        message: target.path.value,
+        message: widget.target.path.value,
         child: Row(
           children: [
             const Icon(
@@ -4808,12 +5107,35 @@ class _Breadcrumb extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                target.path.value,
+                widget.target.path.value,
                 overflow: TextOverflow.ellipsis,
                 style: _bodyStyle(context).copyWith(color: _ScanColors.text),
               ),
             ),
           ],
+        ),
+      ),
+    );
+    if (!isInteractive) {
+      return content;
+    }
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => _setHovered(true),
+      onExit: (_) => _setHovered(false),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          key: const ValueKey('scan-target-breadcrumb-action'),
+          onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(8),
+          focusColor: _ScanColors.cyan.withValues(alpha: 0.10),
+          highlightColor: _ScanColors.cyan.withValues(alpha: 0.08),
+          hoverColor: Colors.transparent,
+          splashColor: _ScanColors.cyan.withValues(alpha: 0.12),
+          child: content,
         ),
       ),
     );
@@ -4934,16 +5256,393 @@ TextStyle _monoStyle(BuildContext context) {
   );
 }
 
-String _formatRowsSize(List<NodePageItem> rows) {
-  final total = rows.fold<BigInt>(
-    BigInt.zero,
-    (sum, row) => sum + row.size.rawBigInt,
-  );
-  return _formatBytes(total);
+bool _shouldShowDiskUsageMap(
+  ScanWorkspaceStore store,
+  DiskUsageMapRenderer? renderer,
+) {
+  return renderer != null &&
+      _availableDiskUsageMapRows(
+        store,
+      ).any((row) => _diskUsageMapSize(row) > BigInt.zero);
 }
 
 bool _shouldShowMetricStrip(ScanWorkspaceStore store) {
-  return store.progress != null || _summaryRows(store).isNotEmpty;
+  return store.progress != null || _metricSummary(store).hasData;
+}
+
+final class _MetricSummary {
+  const _MetricSummary({required this.totalSize, required this.largest});
+
+  final BigInt? totalSize;
+  final NodePageItem? largest;
+
+  bool get hasData => totalSize != null || largest != null;
+}
+
+_MetricSummary _metricSummary(ScanWorkspaceStore store) {
+  final focusedNode = store.diskUsageMapFocusNode;
+  final rootNode = focusedNode ?? store.diskUsageMapRootNode;
+  final diskRows = store.diskUsageMapRows;
+  if (diskRows.isNotEmpty || rootNode != null) {
+    final positiveRows = _positiveSizeRows(diskRows);
+    final rootSize = rootNode == null ? null : _diskUsageMapSize(rootNode);
+    return _MetricSummary(
+      totalSize: rootSize != null && rootSize > BigInt.zero
+          ? rootSize
+          : _coveredRowsSizeOrNull(positiveRows),
+      largest: _largestSummaryRow(
+        positiveRows,
+        excludedNodeId: rootNode?.nodeId,
+      ),
+    );
+  }
+
+  final rows = _positiveSizeRows(_summaryRows(store));
+  return _MetricSummary(
+    totalSize: _coveredRowsSizeOrNull(rows),
+    largest: _largestSummaryRow(rows),
+  );
+}
+
+String? _metricSummarySizeText(ScanWorkspaceStore store) {
+  final totalSize = _metricSummary(store).totalSize;
+  return totalSize == null ? null : _formatBytes(totalSize);
+}
+
+List<NodePageItem> _positiveSizeRows(List<NodePageItem> rows) {
+  return [
+    for (final row in rows)
+      if (_diskUsageMapSize(row) > BigInt.zero) row,
+  ];
+}
+
+BigInt? _coveredRowsSizeOrNull(List<NodePageItem> rows) {
+  if (rows.isEmpty) {
+    return null;
+  }
+  final sortedRows = [...rows]
+    ..sort((left, right) {
+      return _diskUsageMapSize(right).compareTo(_diskUsageMapSize(left));
+    });
+  return _diskUsageMapCoveredSize(
+    sortedRows,
+    rowById: <NodeId, NodePageItem>{
+      for (final row in sortedRows) row.nodeId: row,
+    },
+  );
+}
+
+NodePageItem? _largestSummaryRow(
+  List<NodePageItem> rows, {
+  NodeId? excludedNodeId,
+}) {
+  final candidates = [
+    for (final row in rows)
+      if (row.nodeId != excludedNodeId && _diskUsageMapSize(row) > BigInt.zero)
+        row,
+  ];
+  if (candidates.isEmpty) {
+    return null;
+  }
+
+  final directories = [
+    for (final row in candidates)
+      if (row.kind == NodeKind.directory) row,
+  ];
+  final pool = directories.isEmpty ? candidates : directories;
+  pool.sort((left, right) {
+    return _diskUsageMapSize(right).compareTo(_diskUsageMapSize(left));
+  });
+  return pool.first;
+}
+
+const _diskUsageMapMaxTiles = 18;
+
+final _diskUsageMapStyle = DiskUsageMapStyle(
+  backgroundColor: _ScanColors.innerPanel,
+  borderColor: _ScanColors.border,
+  textColor: _ScanColors.text,
+  mutedTextColor: _ScanColors.textSoft,
+  tileBorderColor: const Color(0x99263148),
+  selectedTileBorderColor: _ScanColors.cyan,
+  focusedTileBorderColor: _ScanColors.blue,
+  warningColor: _ScanColors.yellow,
+  protectedColor: const Color(0xFF64748B),
+  otherColor: const Color(0xFF20283D),
+  palette: const <Color>[
+    _ScanColors.blue,
+    _ScanColors.violet,
+    _ScanColors.cyan,
+    Color(0xFF14B8A6),
+    Color(0xFF60A5FA),
+    Color(0xFFA78BFA),
+  ],
+);
+
+DiskUsageMapViewLabels _diskUsageMapLabels(CleanDiskLocalizations l10n) {
+  return DiskUsageMapViewLabels(
+    title: l10n.diskUsageMapTitle,
+    description: l10n.diskUsageMapDescription,
+    emptyTitle: l10n.diskUsageMapEmptyTitle,
+    emptyMessage: l10n.diskUsageMapEmptyMessage,
+    dataFallbackTitle: l10n.diskUsageMapDataFallbackTitle,
+    unsupportedRendererMessage: l10n.diskUsageMapUnsupportedRendererMessage,
+    renderFailureMessage: l10n.diskUsageMapRenderFailureMessage,
+    otherLabel: l10n.diskUsageMapOtherLabel,
+    stalePrefix: l10n.diskUsageMapStalePrefix,
+    warningPrefix: l10n.diskUsageMapWarningPrefix,
+  );
+}
+
+String _diskUsageMapSummaryText(
+  CleanDiskLocalizations l10n,
+  DiskUsageMapProjection projection,
+  NodePageItem? focusedNode,
+) {
+  final totalSize = BigInt.tryParse(projection.totalSizeBytesDecimal);
+  final sizeText = totalSize == null
+      ? projection.totalSizeBytesDecimal
+      : _formatBytes(totalSize);
+  final itemText = l10n.detailsItemsCount(count: projection.visualTiles.length);
+  if (focusedNode == null) {
+    return '$sizeText - $itemText';
+  }
+  return '${focusedNode.name} - $sizeText - $itemText';
+}
+
+DiskUsageMapProjection? _diskUsageMapProjection({
+  required CleanDiskLocalizations l10n,
+  required ScanWorkspaceStore store,
+  required ScanTarget activeTarget,
+}) {
+  final mapRows = _availableDiskUsageMapRows(store);
+  final positiveRows = [
+    for (final row in mapRows)
+      if (_diskUsageMapSize(row) > BigInt.zero) row,
+  ];
+  if (positiveRows.isEmpty) {
+    return null;
+  }
+
+  final focusedNode = store.diskUsageMapFocusNode;
+  final rootNode = focusedNode ?? store.diskUsageMapRootNode;
+  final rootNodeId =
+      rootNode?.nodeId.value ??
+      store.viewport.parentId?.value ??
+      store.primaryRootNodeId?.value ??
+      positiveRows.first.parentId?.value ??
+      positiveRows.first.nodeId.value;
+  final rowById = <NodeId, NodePageItem>{
+    for (final row in positiveRows) row.nodeId: row,
+  };
+  final sortedRows = [...positiveRows]
+    ..sort((left, right) {
+      return _diskUsageMapSize(right).compareTo(_diskUsageMapSize(left));
+    });
+  final fallbackTotalSize = _diskUsageMapCoveredSize(
+    sortedRows,
+    rowById: rowById,
+  );
+  final rootSize = rootNode == null ? BigInt.zero : _diskUsageMapSize(rootNode);
+  final totalSize = rootSize > BigInt.zero ? rootSize : fallbackTotalSize;
+  final visualRows = sortedRows.take(_diskUsageMapMaxTiles).toList();
+  final coveredSize = _diskUsageMapCoveredSize(visualRows, rowById: rowById);
+  final uncoveredSize = totalSize - coveredSize;
+  final otherSize = uncoveredSize > BigInt.zero ? uncoveredSize : BigInt.zero;
+  final snapshotId = store.activeSnapshotId?.value ?? 'unknown';
+
+  return DiskUsageMapProjection(
+    scanSnapshotId: snapshotId,
+    rootNodeId: rootNodeId,
+    projectionId:
+        '$snapshotId:$rootNodeId:${store.viewport.mode.name}:'
+        '${store.diskUsageMapFocusNodeId?.value ?? 'all'}:'
+        '${store.viewport.isStale ? 'stale' : 'current'}:'
+        '${positiveRows.length}',
+    kind: DiskUsageMapKind.treemap,
+    sizeBasis: _diskUsageMapSizeBasis(positiveRows.first.size),
+    totalSizeBytesDecimal: totalSize.toString(),
+    freshness: store.viewport.isStale
+        ? DiskUsageMapFreshness.stale
+        : DiskUsageMapFreshness.current,
+    tiles: [
+      for (final row in visualRows)
+        _diskUsageMapTile(
+          row,
+          totalSize: totalSize,
+          depth: _diskUsageMapDepth(
+            row,
+            rootNodeId: rootNodeId,
+            rowById: rowById,
+          ),
+          store: store,
+          activeTarget: activeTarget,
+        ),
+    ],
+    otherTile: otherSize > BigInt.zero
+        ? DiskUsageMapTile(
+            nodeId: '__other__',
+            label: l10n.diskUsageMapOtherLabel,
+            sizeBytesDecimal: otherSize.toString(),
+            percentOfRootBasisPoints: _basisPoints(otherSize, totalSize),
+            colorKey: 'other',
+            depth: 0,
+            kind: DiskUsageMapTileKind.other,
+            issueCount: 0,
+            childCount: 0,
+            hasMoreChildren: false,
+            disabled: true,
+          )
+        : null,
+  );
+}
+
+List<NodePageItem> _availableDiskUsageMapRows(ScanWorkspaceStore store) {
+  final diskRows = store.diskUsageMapRows;
+  if (diskRows.isNotEmpty) {
+    return diskRows;
+  }
+  return store.visibleRows;
+}
+
+DiskUsageMapTile _diskUsageMapTile(
+  NodePageItem row, {
+  required BigInt totalSize,
+  required int depth,
+  required ScanWorkspaceStore store,
+  required ScanTarget activeTarget,
+}) {
+  final size = _diskUsageMapSize(row);
+  final issueCount = row.issueCount + row.subtreeIssueCount;
+  return DiskUsageMapTile(
+    nodeId: row.nodeId.value,
+    parentNodeId: row.parentId?.value,
+    label: row.name,
+    displayPathHint: _displayPathForSelection(
+      store: store,
+      target: activeTarget,
+      selected: row,
+    ),
+    sizeBytesDecimal: size.toString(),
+    percentOfRootBasisPoints: _basisPoints(size, totalSize),
+    colorKey: _diskUsageMapColorKey(row),
+    depth: depth,
+    kind: _diskUsageMapTileKind(row, issueCount),
+    riskHint: _diskUsageMapRiskHint(row, issueCount),
+    issueCount: issueCount,
+    childCount: row.childCount,
+    hasMoreChildren: row.childCompleteness != ChildCompleteness.complete,
+  );
+}
+
+BigInt _diskUsageMapCoveredSize(
+  List<NodePageItem> rows, {
+  required Map<NodeId, NodePageItem> rowById,
+}) {
+  var total = BigInt.zero;
+  final covered = <NodeId>{};
+  for (final row in rows) {
+    if (_hasDiskUsageMapCoveredAncestor(row, covered, rowById)) {
+      continue;
+    }
+    covered.add(row.nodeId);
+    total += _diskUsageMapSize(row);
+  }
+  return total;
+}
+
+bool _hasDiskUsageMapCoveredAncestor(
+  NodePageItem row,
+  Set<NodeId> covered,
+  Map<NodeId, NodePageItem> rowById,
+) {
+  var parentId = row.parentId;
+  final visited = <NodeId>{row.nodeId};
+  while (parentId != null && visited.add(parentId)) {
+    if (covered.contains(parentId)) {
+      return true;
+    }
+    parentId = rowById[parentId]?.parentId;
+  }
+  return false;
+}
+
+int _diskUsageMapDepth(
+  NodePageItem row, {
+  required String rootNodeId,
+  required Map<NodeId, NodePageItem> rowById,
+}) {
+  var depth = 0;
+  var parentId = row.parentId;
+  final visited = <NodeId>{row.nodeId};
+  while (parentId != null &&
+      parentId.value != rootNodeId &&
+      visited.add(parentId)) {
+    final parent = rowById[parentId];
+    if (parent == null) {
+      break;
+    }
+    depth += 1;
+    parentId = parent.parentId;
+  }
+  return depth;
+}
+
+BigInt _diskUsageMapSize(NodePageItem row) {
+  return row.size.byteEquivalentBigInt ?? row.size.rawBigInt;
+}
+
+DiskUsageMapSizeBasis _diskUsageMapSizeBasis(SizeFact size) {
+  return switch (size.quantity) {
+    MeasuredQuantity.allocatedBytes => DiskUsageMapSizeBasis.allocatedBytes,
+    MeasuredQuantity.apparentBytes => DiskUsageMapSizeBasis.logicalBytes,
+    MeasuredQuantity.blockCount ||
+    MeasuredQuantity.unknown => DiskUsageMapSizeBasis.logicalBytes,
+  };
+}
+
+DiskUsageMapTileKind _diskUsageMapTileKind(NodePageItem row, int issueCount) {
+  if (issueCount > 0) {
+    return DiskUsageMapTileKind.warning;
+  }
+  if (row.flags.system) {
+    return DiskUsageMapTileKind.protected;
+  }
+  if (row.flags.hidden) {
+    return DiskUsageMapTileKind.hidden;
+  }
+  return DiskUsageMapTileKind.node;
+}
+
+DiskUsageMapRiskHint _diskUsageMapRiskHint(NodePageItem row, int issueCount) {
+  if (issueCount > 0) {
+    return DiskUsageMapRiskHint.high;
+  }
+  if (row.flags.system || row.flags.hidden) {
+    return DiskUsageMapRiskHint.medium;
+  }
+  return DiskUsageMapRiskHint.none;
+}
+
+String _diskUsageMapColorKey(NodePageItem row) {
+  return '${row.kind.name}:${row.flags.package ? 'package' : 'node'}';
+}
+
+int _basisPoints(BigInt size, BigInt totalSize) {
+  if (size <= BigInt.zero || totalSize <= BigInt.zero) {
+    return 0;
+  }
+  final value = (size * BigInt.from(10000)) ~/ totalSize;
+  if (value > BigInt.from(10000)) {
+    return 10000;
+  }
+  return value.toInt();
+}
+
+bool _isSelectableDiskUsageMapTile(DiskUsageMapTile tile) {
+  return !tile.disabled &&
+      tile.kind != DiskUsageMapTileKind.other &&
+      RegExp(r'^\d+$').hasMatch(tile.nodeId);
 }
 
 List<NodePageItem> _summaryRows(ScanWorkspaceStore store) {
@@ -5012,16 +5711,30 @@ String _targetChoiceLabel(
   return switch (choice.kind) {
     ScanTargetChoiceKind.home => l10n.targetHome,
     ScanTargetChoiceKind.downloads => l10n.targetDownloads,
+    ScanTargetChoiceKind.library => l10n.targetLibrary,
+    ScanTargetChoiceKind.applications => l10n.targetApplications,
     ScanTargetChoiceKind.root => l10n.targetRoot,
     ScanTargetChoiceKind.volume =>
       choice.displayName.isEmpty ? l10n.targetVolume : choice.displayName,
   };
 }
 
+List<ScanTargetChoice> _railTargetChoices(
+  List<ScanTargetChoice> choices,
+  ScanTarget activeTarget,
+) {
+  return choices
+      .where((choice) => choice.target.path.value != activeTarget.path.value)
+      .take(6)
+      .toList(growable: false);
+}
+
 IconData _targetChoiceIcon(ScanTargetChoiceKind kind) {
   return switch (kind) {
     ScanTargetChoiceKind.home => Icons.home_outlined,
     ScanTargetChoiceKind.downloads => Icons.download_outlined,
+    ScanTargetChoiceKind.library => Icons.folder_special_outlined,
+    ScanTargetChoiceKind.applications => Icons.apps_outlined,
     ScanTargetChoiceKind.root => Icons.storage_outlined,
     ScanTargetChoiceKind.volume => Icons.dns_outlined,
   };

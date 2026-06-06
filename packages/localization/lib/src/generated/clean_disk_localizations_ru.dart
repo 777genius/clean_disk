@@ -175,6 +175,46 @@ class CleanDiskLocalizationsRu extends CleanDiskLocalizations {
       'Некоторые пути пропущены или деградировали. Проверь детали перед действиями.';
 
   @override
+  String get diskUsageMapTitle => 'Карта диска';
+
+  @override
+  String get diskUsageMapDescription =>
+      'Крупнейшие видимые элементы скана по размеру';
+
+  @override
+  String get diskUsageMapEmptyTitle => 'Нет данных карты';
+
+  @override
+  String get diskUsageMapEmptyMessage =>
+      'Запусти скан или открой папку с данными о размере.';
+
+  @override
+  String get diskUsageMapDataFallbackTitle => 'Данные карты';
+
+  @override
+  String get diskUsageMapUnsupportedRendererMessage =>
+      'Этот renderer не может показать текущую проекцию.';
+
+  @override
+  String get diskUsageMapRenderFailureMessage =>
+      'Карту не удалось отрисовать, показываю список данных.';
+
+  @override
+  String get diskUsageMapStalePrefix => 'Устарело';
+
+  @override
+  String get diskUsageMapWarningPrefix => 'Предупреждение';
+
+  @override
+  String get diskUsageMapOtherLabel => 'Остальное';
+
+  @override
+  String get diskUsageMapExpandAction => 'Развернуть карту диска';
+
+  @override
+  String get diskUsageMapCollapseAction => 'Свернуть карту диска';
+
+  @override
   String get revealAction => 'Показать';
 
   @override

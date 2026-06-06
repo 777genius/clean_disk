@@ -1,3 +1,4 @@
+import 'package:clean_disk_design_system/clean_disk_design_system.dart';
 import 'package:modularity_flutter/modularity_flutter.dart';
 
 import '../presentation/pages/scan_home_page.dart';
@@ -8,11 +9,16 @@ final class ScanModule extends Module {
   ScanModule({
     ScanUseCaseBundle? useCases,
     ScanWorkspaceConfig config = const ScanWorkspaceConfig(),
+    DiskUsageMapRenderer? diskUsageMapRenderer,
   }) : _useCases = useCases,
-       _config = config;
+       _config = config,
+       _diskUsageMapRenderer = diskUsageMapRenderer;
 
   final ScanUseCaseBundle? _useCases;
   final ScanWorkspaceConfig _config;
+  final DiskUsageMapRenderer? _diskUsageMapRenderer;
+
+  DiskUsageMapRenderer? get diskUsageMapRenderer => _diskUsageMapRenderer;
 
   @override
   void binds(Binder i) {

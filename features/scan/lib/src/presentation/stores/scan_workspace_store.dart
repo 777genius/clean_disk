@@ -31,6 +31,8 @@ enum ScanPageLoadState { idle, loading, failed }
 
 enum ScanQueryMode { children, search, topItems }
 
+const _diskUsageMapRequestedLimit = 512;
+
 final class ScanTreeNodeRow {
   const ScanTreeNodeRow({
     required this.item,
@@ -215,6 +217,8 @@ final class ScanWorkspaceStore with Store {
       ObservableList<ScanTargetChoice>();
   final ObservableList<NodePageItem> _visibleRows =
       ObservableList<NodePageItem>();
+  final ObservableList<NodePageItem> _diskUsageMapRows =
+      ObservableList<NodePageItem>();
   final ObservableMap<NodeId, NodePageItem> _treeNodesById =
       ObservableMap<NodeId, NodePageItem>();
   final ObservableMap<NodeId, _TreeChildrenPageState> _treeChildrenByParent =
@@ -233,11 +237,23 @@ final class ScanWorkspaceStore with Store {
   final Observable<CleanupRecoveryInbox> _cleanupRecoveryInbox = Observable(
     const CleanupRecoveryInbox(interruptedReceipts: []),
   );
+  final Observable<SnapshotId?> _diskUsageMapSnapshotId =
+      Observable<SnapshotId?>(null);
+  final Observable<NodePageItem?> _diskUsageMapRootNode =
+      Observable<NodePageItem?>(null);
+  final Observable<NodeId?> _diskUsageMapFocusNodeId = Observable<NodeId?>(
+    null,
+  );
+  final Observable<bool> _isLoadingDiskUsageMapRows = Observable(false);
+  final Observable<AppFailure?> _diskUsageMapFailure = Observable<AppFailure?>(
+    null,
+  );
 
   StreamSubscription<Result<ScanEventEnvelope>>? _eventSubscription;
   EventSequence? _lastEventSequence;
   void Function()? _onChanged;
   var _searchRequestGeneration = 0;
+  var _diskUsageMapRequestGeneration = 0;
 
   void setChangeListener(void Function()? listener) {
     _onChanged = listener;
@@ -341,6 +357,41 @@ final class ScanWorkspaceStore with Store {
     }
     return List.unmodifiable(_visibleRows);
   }
+
+  List<NodePageItem> get diskUsageMapRows {
+    final rows = List<NodePageItem>.unmodifiable(_diskUsageMapRows);
+    final focusNodeId = _diskUsageMapFocusNodeId.value;
+    if (focusNodeId == null) {
+      return rows;
+    }
+
+    final focused = _diskUsageMapNode(rows, focusNodeId);
+    if (focused == null) {
+      return rows;
+    }
+
+    final descendants = _diskUsageMapDescendants(rows, focusNodeId);
+    if (descendants.isEmpty) {
+      return List.unmodifiable([focused]);
+    }
+    return List.unmodifiable([focused, ...descendants]);
+  }
+
+  NodePageItem? get diskUsageMapFocusNode {
+    final focusNodeId = _diskUsageMapFocusNodeId.value;
+    if (focusNodeId == null) {
+      return null;
+    }
+    return _diskUsageMapNode(_diskUsageMapRows, focusNodeId);
+  }
+
+  NodePageItem? get diskUsageMapRootNode => _diskUsageMapRootNode.value;
+
+  NodeId? get diskUsageMapFocusNodeId => _diskUsageMapFocusNodeId.value;
+
+  bool get isLoadingDiskUsageMapRows => _isLoadingDiskUsageMapRows.value;
+
+  AppFailure? get diskUsageMapFailure => _diskUsageMapFailure.value;
 
   List<CleanupQueueIntent> get queuedItems {
     return List.unmodifiable(_queuedItems.values);
@@ -640,7 +691,9 @@ final class ScanWorkspaceStore with Store {
     runInAction(() {
       final currentViewport = viewport;
       _activeSnapshotId.value = null;
+      _progress.value = null;
       _resetTreeProjection();
+      _resetDiskUsageMapProjection();
       _visibleRows.clear();
       _movedToTrashItems.clear();
       _validatedCleanupPlan.value = null;
@@ -921,6 +974,7 @@ final class ScanWorkspaceStore with Store {
     switch (result) {
       case ResultSuccess(:final value):
         _applyTreeRootPage(value, parentId, nextViewport);
+        unawaited(loadDiskUsageMapRows());
       case ResultFailure(:final failure):
         _setFailure(failure);
     }
@@ -1041,6 +1095,95 @@ final class ScanWorkspaceStore with Store {
       case ResultFailure(:final failure):
         _setFailure(failure);
     }
+  }
+
+  Future<void> loadDiskUsageMapRows({
+    int limit = _diskUsageMapRequestedLimit,
+  }) async {
+    final currentSessionId = sessionId;
+    final currentSnapshotId = activeSnapshotId;
+    if (currentSessionId == null || currentSnapshotId == null) {
+      return;
+    }
+    if (_diskUsageMapSnapshotId.value == currentSnapshotId &&
+        _diskUsageMapRows.isNotEmpty &&
+        !_isLoadingDiskUsageMapRows.value) {
+      return;
+    }
+
+    final requestGeneration = _diskUsageMapRequestGeneration += 1;
+    final queryLimit = _boundedQueryLimit(limit);
+    runInAction(() {
+      _isLoadingDiskUsageMapRows.value = true;
+      _diskUsageMapFailure.value = null;
+    });
+
+    final result = await _getTopItems(
+      TopItemsQuery(
+        sessionId: currentSessionId,
+        snapshotId: currentSnapshotId,
+        kind: TopItemsKind.filesAndDirectories,
+        cursor: null,
+        limit: queryLimit,
+      ),
+    );
+    if (!_isCurrentSnapshot(currentSessionId, currentSnapshotId) ||
+        requestGeneration != _diskUsageMapRequestGeneration) {
+      runInAction(() {
+        _isLoadingDiskUsageMapRows.value = false;
+      });
+      _notifyChanged();
+      return;
+    }
+
+    switch (result) {
+      case ResultSuccess(:final value):
+        final rootIds = rootNodeIds.toSet();
+        NodePageItem? rootNode;
+        for (final item in value.items) {
+          if (rootIds.contains(item.nodeId)) {
+            rootNode = item;
+            break;
+          }
+        }
+        runInAction(() {
+          _diskUsageMapSnapshotId.value = value.snapshotId;
+          _diskUsageMapRootNode.value = rootNode;
+          _diskUsageMapRows
+            ..clear()
+            ..addAll(
+              value.items.where((item) => !rootIds.contains(item.nodeId)),
+            );
+          _diskUsageMapFocusNodeId.value = null;
+          _isLoadingDiskUsageMapRows.value = false;
+          _diskUsageMapFailure.value = null;
+        });
+      case ResultFailure(:final failure):
+        runInAction(() {
+          _isLoadingDiskUsageMapRows.value = false;
+          _diskUsageMapFailure.value = failure;
+        });
+    }
+    _notifyChanged();
+  }
+
+  void toggleDiskUsageMapFocus(NodeId nodeId) {
+    runInAction(() {
+      _diskUsageMapFocusNodeId.value = _diskUsageMapFocusNodeId.value == nodeId
+          ? null
+          : nodeId;
+    });
+    _notifyChanged();
+  }
+
+  void clearDiskUsageMapFocus() {
+    if (_diskUsageMapFocusNodeId.value == null) {
+      return;
+    }
+    runInAction(() {
+      _diskUsageMapFocusNodeId.value = null;
+    });
+    _notifyChanged();
   }
 
   Future<void> changeSort(ChildSort sort) async {
@@ -1515,8 +1658,17 @@ final class ScanWorkspaceStore with Store {
   }
 
   void _applySessionStatus(ScanSessionStatus status) {
-    _sessionStatus.value = status;
-    _progress.value = status.progress ?? _progress.value;
+    final effectiveProgress = _effectiveStatusProgress(status);
+    _sessionStatus.value = effectiveProgress == status.progress
+        ? status
+        : ScanSessionStatus(
+            sessionId: status.sessionId,
+            state: status.state,
+            snapshotId: status.snapshotId,
+            rootNodeIds: status.rootNodeIds,
+            progress: effectiveProgress,
+          );
+    _progress.value = effectiveProgress;
     if (status.snapshotId != null) {
       _activeSnapshotId.value = status.snapshotId;
     }
@@ -1525,6 +1677,29 @@ final class ScanWorkspaceStore with Store {
     }
     _deletePlan.value = _buildDeletePlanSnapshot();
     _notifyChanged();
+  }
+
+  ScanProgress? _effectiveStatusProgress(ScanSessionStatus status) {
+    final statusProgress = status.progress;
+    if (statusProgress != null) {
+      return statusProgress;
+    }
+    if (_sessionStatus.value?.sessionId != status.sessionId) {
+      return null;
+    }
+    return _progress.value;
+  }
+
+  int _boundedQueryLimit(int requestedLimit) {
+    final fallbackLimit = viewport.pageSize <= 0 ? 1 : viewport.pageSize;
+    final maxPageSize = _capabilities.value?.limits.maxPageSize;
+    final upperBound = maxPageSize != null && maxPageSize > 0
+        ? maxPageSize
+        : fallbackLimit;
+    if (requestedLimit <= 0) {
+      return fallbackLimit <= upperBound ? fallbackLimit : upperBound;
+    }
+    return requestedLimit <= upperBound ? requestedLimit : upperBound;
   }
 
   void _setPageLoading() {
@@ -1645,6 +1820,38 @@ final class ScanWorkspaceStore with Store {
     }
   }
 
+  NodePageItem? _diskUsageMapNode(Iterable<NodePageItem> rows, NodeId nodeId) {
+    for (final row in rows) {
+      if (row.nodeId == nodeId) {
+        return row;
+      }
+    }
+    return null;
+  }
+
+  List<NodePageItem> _diskUsageMapDescendants(
+    Iterable<NodePageItem> rows,
+    NodeId parentId,
+  ) {
+    final childrenByParent = <NodeId, List<NodePageItem>>{};
+    for (final row in rows) {
+      final parent = row.parentId;
+      if (parent == null) {
+        continue;
+      }
+      (childrenByParent[parent] ??= <NodePageItem>[]).add(row);
+    }
+
+    final descendants = <NodePageItem>[];
+    final queue = <NodePageItem>[...?childrenByParent[parentId]];
+    while (queue.isNotEmpty) {
+      final current = queue.removeAt(0);
+      descendants.add(current);
+      queue.addAll(childrenByParent[current.nodeId] ?? const <NodePageItem>[]);
+    }
+    return descendants;
+  }
+
   NodeId? get _loadMoreTreeParentId {
     if (viewport.mode != ScanQueryMode.children) {
       return null;
@@ -1682,6 +1889,16 @@ final class ScanWorkspaceStore with Store {
     _expandedNodeIds.clear();
   }
 
+  void _resetDiskUsageMapProjection() {
+    _diskUsageMapRequestGeneration += 1;
+    _diskUsageMapRows.clear();
+    _diskUsageMapSnapshotId.value = null;
+    _diskUsageMapRootNode.value = null;
+    _diskUsageMapFocusNodeId.value = null;
+    _isLoadingDiskUsageMapRows.value = false;
+    _diskUsageMapFailure.value = null;
+  }
+
   void _clearReadModelState() {
     final currentViewport = viewport;
     _sessionStatus.value = null;
@@ -1694,6 +1911,7 @@ final class ScanWorkspaceStore with Store {
     _lastRevealFailure.value = null;
     _visibleRows.clear();
     _resetTreeProjection();
+    _resetDiskUsageMapProjection();
     _queuedItems.clear();
     _movedToTrashItems.clear();
     _validatedCleanupPlan.value = null;

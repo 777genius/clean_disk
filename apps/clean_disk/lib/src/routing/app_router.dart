@@ -26,7 +26,9 @@ final class AppRouter {
         builder: (context, state) {
           return ModuleScope<ScanModule>(
             module: _scanModule,
-            child: const ScanModuleHost(),
+            child: ScanModuleHost(
+              diskUsageMapRenderer: _scanModule.diskUsageMapRenderer,
+            ),
           );
         },
       ),

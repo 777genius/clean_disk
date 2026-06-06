@@ -1,7 +1,14 @@
 import 'package:clean_disk_core/clean_disk_core.dart';
 import 'package:clean_disk_scan/src/domain/scan_models.dart';
 
-enum ScanTargetChoiceKind { home, downloads, root, volume }
+enum ScanTargetChoiceKind {
+  home,
+  downloads,
+  library,
+  applications,
+  root,
+  volume,
+}
 
 final class ScanTargetChoice {
   const ScanTargetChoice({

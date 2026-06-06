@@ -174,6 +174,45 @@ class CleanDiskLocalizationsEn extends CleanDiskLocalizations {
       'Some paths were skipped or degraded. Review details before acting.';
 
   @override
+  String get diskUsageMapTitle => 'Disk map';
+
+  @override
+  String get diskUsageMapDescription => 'Largest visible scan items by size';
+
+  @override
+  String get diskUsageMapEmptyTitle => 'No map data';
+
+  @override
+  String get diskUsageMapEmptyMessage =>
+      'Run a scan or open a folder with size data.';
+
+  @override
+  String get diskUsageMapDataFallbackTitle => 'Map data';
+
+  @override
+  String get diskUsageMapUnsupportedRendererMessage =>
+      'This map renderer cannot display the current projection.';
+
+  @override
+  String get diskUsageMapRenderFailureMessage =>
+      'The map could not be rendered, showing data list instead.';
+
+  @override
+  String get diskUsageMapStalePrefix => 'Stale';
+
+  @override
+  String get diskUsageMapWarningPrefix => 'Warning';
+
+  @override
+  String get diskUsageMapOtherLabel => 'Other';
+
+  @override
+  String get diskUsageMapExpandAction => 'Expand disk map';
+
+  @override
+  String get diskUsageMapCollapseAction => 'Collapse disk map';
+
+  @override
   String get revealAction => 'Reveal';
 
   @override

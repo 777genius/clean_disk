@@ -872,6 +872,93 @@ void main() {
     expect(store.viewport.mode, ScanQueryMode.topItems);
   });
 
+  test('disk usage map query respects daemon page size limit', () async {
+    final repository = _FakeScanRepository();
+    final eventClient = _FakeScanEventClient();
+    final store = _store(repository, eventClient);
+
+    await store.checkDaemonCompatibility();
+    repository.startStatus = Result.success(
+      ScanSessionStatus(
+        sessionId: ScanSessionId('1'),
+        state: SessionState.completed,
+        snapshotId: SnapshotId('2'),
+        rootNodeIds: [NodeId('1')],
+        progress: null,
+      ),
+    );
+    repository.childrenPage = Result.success(
+      NodePage(
+        snapshotId: SnapshotId('2'),
+        items: [_node(id: '10', name: 'Library')],
+        nextCursor: null,
+      ),
+    );
+
+    await store.start(_startCommand());
+    await store.loadDiskUsageMapRows(limit: 512);
+
+    expect(repository.topItemsQueries.single.limit, 100);
+    expect(store.diskUsageMapRows.single.nodeId, NodeId('10'));
+  });
+
+  test(
+    'completed status without progress keeps last progress metrics',
+    () async {
+      final repository = _FakeScanRepository();
+      final eventClient = _FakeScanEventClient();
+      final store = _store(repository, eventClient);
+
+      repository.startStatus = Result.success(
+        ScanSessionStatus(
+          sessionId: ScanSessionId('1'),
+          state: SessionState.running,
+          snapshotId: null,
+          rootNodeIds: const [],
+          progress: null,
+        ),
+      );
+      await store.start(_startCommand());
+
+      repository.statusResponses.add(
+        Result.success(
+          ScanSessionStatus(
+            sessionId: ScanSessionId('1'),
+            state: SessionState.running,
+            snapshotId: null,
+            rootNodeIds: const [],
+            progress: ScanProgress(
+              scannedItems: BigInt.from(42),
+              elapsedMs: BigInt.from(1000),
+              throughputBytesPerSec: BigInt.from(1024),
+            ),
+          ),
+        ),
+      );
+      await store.refreshStatus();
+
+      repository.statusResponses.add(
+        Result.success(
+          ScanSessionStatus(
+            sessionId: ScanSessionId('1'),
+            state: SessionState.completed,
+            snapshotId: SnapshotId('2'),
+            rootNodeIds: [NodeId('1')],
+            progress: null,
+          ),
+        ),
+      );
+      await store.refreshStatus();
+
+      expect(store.progress?.scannedItems, BigInt.from(42));
+      expect(store.progress?.elapsedMs, BigInt.from(1000));
+      expect(
+        store.sessionStatus?.progress?.throughputBytesPerSec,
+        BigInt.from(1024),
+      );
+    },
+  );
+
   test(
     'search discards older result when a newer query wins the race',
     () async {

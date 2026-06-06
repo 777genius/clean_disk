@@ -124,6 +124,77 @@ void main() {
     expect(find.text('Not checked'), findsNothing);
   });
 
+  testWidgets('collapsible disk map renders above the folder tree', (
+    tester,
+  ) async {
+    await _pumpScanHome(
+      tester,
+      size: const Size(1440, 900),
+      diskUsageMapRenderer: const _TestDiskUsageMapRenderer(),
+    );
+
+    expect(
+      find.byKey(const ValueKey('scan-disk-usage-map-panel')),
+      findsNothing,
+    );
+
+    await _tapScanAction(tester);
+    await tester.pumpAndSettle();
+
+    final panel = find.byKey(const ValueKey('scan-disk-usage-map-panel'));
+    final renderedMap = find.byKey(
+      const ValueKey('test-disk-usage-map-renderer'),
+    );
+    final firstTreeRow = find.byKey(const ValueKey('app-tree-table-row-2'));
+
+    expect(panel, findsOneWidget);
+    expect(renderedMap, findsOneWidget);
+    expect(firstTreeRow, findsOneWidget);
+    var mapLabels = _diskUsageMapLabels(tester);
+    expect(mapLabels, contains('Caches'));
+    expect(mapLabels, contains('Xcode'));
+    expect(mapLabels, contains('Downloads'));
+    expect(find.byKey(const ValueKey('app-tree-table-row-12')), findsNothing);
+    expect(
+      tester.getTopLeft(panel).dy,
+      lessThan(tester.getTopLeft(firstTreeRow).dy),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('test-map-tile-Library')));
+    await tester.pumpAndSettle();
+
+    mapLabels = _diskUsageMapLabels(tester);
+    expect(mapLabels, contains('Library'));
+    expect(mapLabels, contains('Caches'));
+    expect(mapLabels, contains('Xcode'));
+    expect(mapLabels, isNot(contains('Downloads')));
+
+    await tester.tap(find.byKey(const ValueKey('test-map-tile-Library')));
+    await tester.pumpAndSettle();
+
+    mapLabels = _diskUsageMapLabels(tester);
+    expect(mapLabels, contains('Downloads'));
+
+    await tester.tap(find.byKey(const ValueKey('test-map-tile-Library')));
+    await tester.pumpAndSettle();
+    await tester.tap(firstTreeRow);
+    await tester.pumpAndSettle();
+
+    mapLabels = _diskUsageMapLabels(tester);
+    expect(mapLabels, contains('Downloads'));
+
+    await tester.tap(find.byTooltip('Collapse disk map'));
+    await tester.pumpAndSettle();
+
+    expect(panel, findsOneWidget);
+    expect(renderedMap, findsNothing);
+
+    await tester.tap(find.byTooltip('Expand disk map'));
+    await tester.pumpAndSettle();
+
+    expect(renderedMap, findsOneWidget);
+  });
+
   testWidgets('compact layout fits narrow desktop width', (tester) async {
     await _pumpScanHome(tester, size: const Size(430, 900));
 
@@ -296,9 +367,11 @@ void main() {
 
     expect(find.text('TOTAL SCANNED'), findsOneWidget);
     expect(find.text('LARGEST FOLDER'), findsOneWidget);
-    expect(find.text('REVIEW LIST'), findsOneWidget);
-    expect(find.text('SKIPPED'), findsOneWidget);
+    expect(find.text('REVIEW LIST'), findsNothing);
+    expect(find.text('SKIPPED'), findsNothing);
     expect(find.byKey(const ValueKey('scan-drive-summary')), findsOneWidget);
+    expect(find.text('0 B'), findsNothing);
+    expect(find.text('386.4 GB'), findsWidgets);
   });
 
   testWidgets('wide empty table avoids duplicate scan action', (tester) async {
@@ -654,7 +727,7 @@ void main() {
     await _tapScanAction(tester);
     await tester.pumpAndSettle();
 
-    expect(find.text('332.8 GB'), findsWidgets);
+    expect(find.text('386.4 GB'), findsWidgets);
     expect(find.byKey(const ValueKey('app-tree-table-row-3')), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('app-tree-table-toggle-2')));
@@ -662,7 +735,7 @@ void main() {
 
     expect(find.byKey(const ValueKey('app-tree-table-row-3')), findsOneWidget);
     expect(result.store.selectedNodeId, NodeId('2'));
-    expect(find.text('332.8 GB'), findsWidgets);
+    expect(find.text('386.4 GB'), findsWidgets);
     expect(find.text('508.0 GB'), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('app-tree-table-toggle-3')));
@@ -907,16 +980,61 @@ void main() {
       targetPicker: picker,
     );
 
-    await tester.tap(find.byKey(const ValueKey('scan-target-breadcrumb')));
-    await tester.pumpAndSettle();
-
     expect(picker.initialPaths, isEmpty);
+    expect(
+      find.byKey(const ValueKey('scan-target-breadcrumb-action')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('scan-target-picker-action')),
       findsNothing,
     );
     expect(find.byIcon(Icons.keyboard_arrow_down_rounded), findsNothing);
     expect(find.byTooltip('Change folder'), findsNothing);
+  });
+
+  testWidgets('top breadcrumb picks a concrete folder for the next scan', (
+    tester,
+  ) async {
+    final picker = _RecordingScanTargetPicker(
+      ScanTargetPath('/Users/belief/Projects'),
+    );
+    final preferences = _RecordingScanTargetPreferenceStore();
+    final result = await _pumpScanHome(
+      tester,
+      size: const Size(1440, 900),
+      config: const ScanWorkspaceConfig(
+        defaultTargetPath: '/Users/belief',
+        requiresInitialTargetSelection: false,
+      ),
+      targetPicker: picker,
+      targetPreferenceStore: preferences,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('scan-target-breadcrumb-action')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(picker.initialPaths.single.value, '/Users/belief');
+    expect(
+      preferences.savedTargets.single.path.value,
+      '/Users/belief/Projects',
+    );
+    expect(find.text('/Users/belief/Projects'), findsOneWidget);
+
+    await _tapScanAction(tester);
+    await tester.pumpAndSettle();
+
+    expect(
+      result.fixture.repository.lastStartCommand?.targets.single.path.value,
+      '/Users/belief/Projects',
+    );
+    expect(
+      result.fixture.repository.lastStartCommand?.targets.single.scope,
+      TargetScope.localPath,
+    );
   });
 
   testWidgets('wide saved target row has a full-width change target action', (
@@ -933,13 +1051,13 @@ void main() {
       targetPicker: picker,
     );
 
-    expect(find.byTooltip('Change folder'), findsOneWidget);
+    expect(find.byTooltip('Change folder'), findsNothing);
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('scan-target-picker-action')),
         matching: find.byIcon(Icons.keyboard_arrow_down_rounded),
       ),
-      findsOneWidget,
+      findsNothing,
     );
     expect(find.text('Folder'), findsNothing);
     final targetRect = tester.getRect(
@@ -965,6 +1083,136 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(picker.initialPaths.single.value, '/');
+  });
+
+  testWidgets('wide target rail renders concrete catalog folders', (
+    tester,
+  ) async {
+    await _pumpScanHome(
+      tester,
+      size: const Size(1440, 900),
+      config: const ScanWorkspaceConfig(requiresInitialTargetSelection: true),
+      targetPreferenceStore: _RecordingScanTargetPreferenceStore(
+        initial: _target('/Users/belief'),
+      ),
+      targetCatalog: _StaticScanTargetCatalog([
+        _choice(
+          id: 'home',
+          kind: ScanTargetChoiceKind.home,
+          path: '/Users/belief',
+          displayName: 'Home',
+        ),
+        _choice(
+          id: 'downloads',
+          kind: ScanTargetChoiceKind.downloads,
+          path: '/Users/belief/Downloads',
+          displayName: 'Downloads',
+        ),
+        _choice(
+          id: 'library',
+          kind: ScanTargetChoiceKind.library,
+          path: '/Users/belief/Library',
+          displayName: 'Library',
+        ),
+        _choice(
+          id: 'applications',
+          kind: ScanTargetChoiceKind.applications,
+          path: '/Applications',
+          displayName: 'Applications',
+        ),
+      ]),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('scan-target-current')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('scan-target-choice-downloads')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('scan-target-choice-library')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('scan-target-choice-applications')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('wide target rail presets remain selectable with config target', (
+    tester,
+  ) async {
+    final preferences = _RecordingScanTargetPreferenceStore();
+    final targetCatalog = _SequencedScanTargetCatalog([
+      [
+        _choice(
+          id: 'home',
+          kind: ScanTargetChoiceKind.home,
+          path: '/Users/belief',
+          displayName: 'Home',
+        ),
+        _choice(
+          id: 'downloads',
+          kind: ScanTargetChoiceKind.downloads,
+          path: '/Users/belief/Downloads',
+          displayName: 'Downloads',
+        ),
+      ],
+      [
+        _choice(
+          id: 'downloads',
+          kind: ScanTargetChoiceKind.downloads,
+          path: '/Users/belief/Downloads',
+          displayName: 'Downloads',
+        ),
+        _choice(
+          id: 'library',
+          kind: ScanTargetChoiceKind.library,
+          path: '/Users/belief/Library',
+          displayName: 'Library',
+        ),
+      ],
+    ]);
+    final result = await _pumpScanHome(
+      tester,
+      size: const Size(1440, 900),
+      config: const ScanWorkspaceConfig(
+        defaultTargetPath: '/Users/belief',
+        requiresInitialTargetSelection: false,
+      ),
+      targetPreferenceStore: preferences,
+      targetCatalog: targetCatalog,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('scan-target-picker-action')),
+      findsNothing,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('scan-target-choice-action-downloads')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      preferences.savedTargets.single.path.value,
+      '/Users/belief/Downloads',
+    );
+    expect(targetCatalog.listCalls, greaterThanOrEqualTo(2));
+    expect(
+      find.byKey(const ValueKey('scan-target-choice-library')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('scan-target-choice-home')), findsNothing);
+
+    await _tapScanAction(tester);
+    await tester.pumpAndSettle();
+
+    expect(
+      result.fixture.repository.lastStartCommand?.targets.single.path.value,
+      '/Users/belief/Downloads',
+    );
   });
 
   testWidgets(
@@ -1000,14 +1248,23 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      final chooserFinder = find.byKey(
+        const ValueKey('first-run-target-chooser'),
+      );
+      expect(chooserFinder, findsOneWidget);
+      expect(find.text('Choose what to scan'), findsOneWidget);
       expect(
-        find.byKey(const ValueKey('first-run-target-chooser')),
+        find.descendant(of: chooserFinder, matching: find.text('Home')),
         findsOneWidget,
       );
-      expect(find.text('Choose what to scan'), findsOneWidget);
-      expect(find.text('Home'), findsOneWidget);
-      expect(find.text('Downloads'), findsOneWidget);
-      expect(find.text('System root'), findsOneWidget);
+      expect(
+        find.descendant(of: chooserFinder, matching: find.text('Downloads')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: chooserFinder, matching: find.text('System root')),
+        findsOneWidget,
+      );
       expect(find.text('Choose folder'), findsWidgets);
 
       final scanButton = tester.widget<FilledButton>(
@@ -1605,6 +1862,15 @@ Future<void> _tapScanAction(WidgetTester tester) async {
   await tester.tap(find.byTooltip('Scan'));
 }
 
+String _diskUsageMapLabels(WidgetTester tester) {
+  return tester
+          .widget<Text>(
+            find.byKey(const ValueKey('test-disk-usage-map-labels')),
+          )
+          .data ??
+      '';
+}
+
 Future<void> _selectNestedCrashLog(WidgetTester tester) async {
   await tester.tap(find.byKey(const ValueKey('app-tree-table-row-2')));
   await tester.pumpAndSettle();
@@ -1628,6 +1894,7 @@ Future<_PumpedScanHome> _pumpScanHome(
   ScanTargetCatalog? targetCatalog,
   ScanTargetPreferenceStore? targetPreferenceStore,
   PathRevealer? pathRevealer,
+  DiskUsageMapRenderer? diskUsageMapRenderer,
 }) async {
   if (size != null) {
     tester.view.physicalSize = size;
@@ -1662,7 +1929,11 @@ Future<_PumpedScanHome> _pumpScanHome(
           localizationsDelegates: CleanDiskLocalizations.localizationsDelegates,
           supportedLocales: CleanDiskLocalizations.supportedLocales,
           builder: overlayBuilder,
-          home: ScanHomePage(store: store, config: config),
+          home: ScanHomePage(
+            store: store,
+            config: config,
+            diskUsageMapRenderer: diskUsageMapRenderer,
+          ),
         );
       },
     ),
@@ -1715,6 +1986,22 @@ final class _StaticScanTargetCatalog implements ScanTargetCatalog {
   @override
   Future<Result<List<ScanTargetChoice>>> listChoices() async {
     return Result.success(choices);
+  }
+}
+
+final class _SequencedScanTargetCatalog implements ScanTargetCatalog {
+  _SequencedScanTargetCatalog(this.responses);
+
+  final List<List<ScanTargetChoice>> responses;
+  var listCalls = 0;
+
+  @override
+  Future<Result<List<ScanTargetChoice>>> listChoices() async {
+    final index = listCalls < responses.length
+        ? listCalls
+        : responses.length - 1;
+    listCalls += 1;
+    return Result.success(responses[index]);
   }
 }
 
@@ -1809,4 +2096,47 @@ final class _PumpedScanHome {
 
   final FakeScanFeatureFixture fixture;
   final ScanWorkspaceStore store;
+}
+
+final class _TestDiskUsageMapRenderer implements DiskUsageMapRenderer {
+  const _TestDiskUsageMapRenderer();
+
+  @override
+  DiskUsageMapRendererCapabilities get capabilities =>
+      const DiskUsageMapRendererCapabilities(
+        rendererName: 'test',
+        trustLevel: DiskUsageMapRendererTrustLevel.testOnly,
+        supportedKinds: <DiskUsageMapKind>{DiskUsageMapKind.treemap},
+      );
+
+  @override
+  Widget build(BuildContext context, DiskUsageMapRenderContext renderContext) {
+    final tiles = renderContext.projection.visualTiles;
+    return DecoratedBox(
+      key: const ValueKey('test-disk-usage-map-renderer'),
+      decoration: BoxDecoration(color: renderContext.style.backgroundColor),
+      child: Column(
+        children: [
+          Text(
+            tiles.map((tile) => tile.label).join('|'),
+            key: const ValueKey('test-disk-usage-map-labels'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Expanded(
+            child: ListView(
+              children: [
+                for (final tile in tiles.take(4))
+                  GestureDetector(
+                    key: ValueKey('test-map-tile-${tile.label}'),
+                    onTap: () => renderContext.onTileSelected?.call(tile),
+                    child: Text(tile.label),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

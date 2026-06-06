@@ -419,6 +419,78 @@ abstract class CleanDiskLocalizations {
   /// **'Some paths were skipped or degraded. Review details before acting.'**
   String get partialRowsText;
 
+  /// Title for the collapsible disk usage treemap panel.
+  ///
+  /// In en, this message translates to:
+  /// **'Disk map'**
+  String get diskUsageMapTitle;
+
+  /// Accessible description for the disk usage map.
+  ///
+  /// In en, this message translates to:
+  /// **'Largest visible scan items by size'**
+  String get diskUsageMapDescription;
+
+  /// Empty title shown inside the disk usage map.
+  ///
+  /// In en, this message translates to:
+  /// **'No map data'**
+  String get diskUsageMapEmptyTitle;
+
+  /// Empty message shown inside the disk usage map.
+  ///
+  /// In en, this message translates to:
+  /// **'Run a scan or open a folder with size data.'**
+  String get diskUsageMapEmptyMessage;
+
+  /// Title for the accessible list fallback of disk usage map data.
+  ///
+  /// In en, this message translates to:
+  /// **'Map data'**
+  String get diskUsageMapDataFallbackTitle;
+
+  /// Fallback message shown when the selected map renderer does not support the current projection.
+  ///
+  /// In en, this message translates to:
+  /// **'This map renderer cannot display the current projection.'**
+  String get diskUsageMapUnsupportedRendererMessage;
+
+  /// Fallback message shown when the map renderer throws during build.
+  ///
+  /// In en, this message translates to:
+  /// **'The map could not be rendered, showing data list instead.'**
+  String get diskUsageMapRenderFailureMessage;
+
+  /// Short accessible prefix for stale disk usage map data.
+  ///
+  /// In en, this message translates to:
+  /// **'Stale'**
+  String get diskUsageMapStalePrefix;
+
+  /// Short accessible prefix for disk usage map warnings.
+  ///
+  /// In en, this message translates to:
+  /// **'Warning'**
+  String get diskUsageMapWarningPrefix;
+
+  /// Label for the grouped remainder tile in the disk usage map.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get diskUsageMapOtherLabel;
+
+  /// Tooltip for expanding the disk usage map panel.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand disk map'**
+  String get diskUsageMapExpandAction;
+
+  /// Tooltip for collapsing the disk usage map panel.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse disk map'**
+  String get diskUsageMapCollapseAction;
+
   /// Localized string for revealAction.
   ///
   /// In en, this message translates to:
