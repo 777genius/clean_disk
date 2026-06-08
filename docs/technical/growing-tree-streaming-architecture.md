@@ -100,8 +100,8 @@ Current `parallel-disk-usage 0.24.0` does not expose path-bearing node streaming
 callbacks as a named public product API. However our adapter already owns the
 `TreeBuilder::get_info` closure used for pdu traversal. That closure sees each
 visited path, node kind, and local metadata size. `fs_usage_pdu` converts that
-adapter-private traversal evidence into `GrowingTreeEvent` batches through a
-bounded channel and reports:
+adapter-private traversal evidence into a bounded/coalesced live projection and
+reports:
 
 ```text
 growing_tree_streaming = supported
@@ -109,15 +109,20 @@ growing_tree_streaming = supported
 
 Current pdu-backed growing tree semantics:
 
-- partial nodes are discovered as pdu visits paths;
+- materialized partial nodes are bounded and directory-first;
+- file-like paths update materialized ancestor sizes but are not emitted as live
+  rows by default;
 - directory aggregate sizes grow by adding each visited descendant size to its
   materialized ancestors;
 - max-depth is respected for partial node materialization, while skipped deeper
   descendants still contribute to visible ancestor sizes;
-- file-like nodes may complete as soon as their metadata size is known;
 - the root may receive a final completion update immediately before snapshot
   publication, but the adapter must not replay completion for every final node
   in a huge tree because the final snapshot replaces the partial view;
+- each pdu adapter drain emits at most one bounded batch, with latest known sizes
+  coalesced per materialized node;
+- the initial pdu adapter keeps live materialization intentionally small
+  (hundreds of directory-first partial nodes, not thousands of file rows);
 - cancellation is still not fully cooperative because pdu traversal may continue
   until the current worker finishes.
 
@@ -146,7 +151,10 @@ Owns presentation and application state:
 - no cleanup authority from partial rows;
 - replacement of partial rows by authoritative snapshot rows after
   `ScanSnapshotPublished`;
-- virtualized rendering with throttled updates.
+- virtualized rendering with throttled updates;
+- a capped live preview row count for running scans. The UI must not stretch a
+  non-scrollable table to thousands of partial rows while the scanner is still
+  emitting size updates.
 
 Flutter must not sort/filter the full scan tree locally. Partial sort is either
 discovered order or a bounded backend projection marked incomplete.
@@ -210,10 +218,12 @@ Accepted default:
 
 ```text
 scanner callback
-  -> bounded adapter queue
+  -> bounded adapter recorder
+  -> coalesced per-node latest size
   -> engine coalescer
   -> 100-250 ms batch
   -> max event count per batch
+  -> capped Flutter live preview rows
   -> lossy progress allowed, terminal/final events not lossy
 ```
 

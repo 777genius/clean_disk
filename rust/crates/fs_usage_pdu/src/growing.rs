@@ -6,16 +6,13 @@ use fs_usage_engine::{
     GrowingNodeState, GrowingTreeBatch, GrowingTreeEvent, PartialNodeName, ScanEvent,
 };
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet, VecDeque},
     path::{Path, PathBuf},
-    sync::{
-        Mutex,
-        mpsc::{Receiver, SyncSender, sync_channel},
-    },
+    sync::Mutex,
 };
 
-const GROWING_EVENT_CHANNEL_BOUND: usize = 8_192;
-pub(crate) const MAX_GROWING_EVENTS_PER_BATCH: usize = 256;
+const MAX_MATERIALIZED_PARTIAL_NODES: usize = 512;
+pub(crate) const MAX_GROWING_EVENTS_PER_BATCH: usize = 32;
 
 #[derive(Debug)]
 pub(crate) struct PduGrowingTreeRecorder {
@@ -23,13 +20,15 @@ pub(crate) struct PduGrowingTreeRecorder {
     root: PathBuf,
     max_depth: u64,
     inner: Mutex<PduGrowingTreeState>,
-    sender: SyncSender<GrowingTreeEvent>,
 }
 
 #[derive(Debug, Default)]
 struct PduGrowingTreeState {
     next_node_id: u64,
     nodes: HashMap<PathBuf, PduPartialNodeRecord>,
+    pending_discoveries: VecDeque<GrowingTreeEvent>,
+    dirty_paths: VecDeque<PathBuf>,
+    dirty_path_set: HashSet<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -39,55 +38,57 @@ struct PduPartialNodeRecord {
 }
 
 impl PduGrowingTreeRecorder {
-    pub(crate) fn new(
-        session_id: ScanSessionId,
-        root: PathBuf,
-        max_depth: u64,
-    ) -> (Self, Receiver<GrowingTreeEvent>) {
-        let (sender, receiver) = sync_channel(GROWING_EVENT_CHANNEL_BOUND);
-        (
-            Self {
-                session_id,
-                root,
-                max_depth,
-                inner: Mutex::new(PduGrowingTreeState::default()),
-                sender,
-            },
-            receiver,
-        )
+    pub(crate) fn new(session_id: ScanSessionId, root: PathBuf, max_depth: u64) -> Self {
+        Self {
+            session_id,
+            root,
+            max_depth,
+            inner: Mutex::new(PduGrowingTreeState::default()),
+        }
     }
 
     pub(crate) fn record_node(&self, path: &Path, kind: NodeKind, raw_size: u64) {
-        let events = {
-            let mut inner = self
-                .inner
-                .lock()
-                .expect("pdu growing tree recorder poisoned");
-            inner.record_node(
-                self.session_id,
-                &self.root,
-                self.max_depth,
-                path,
-                kind,
-                raw_size,
-            )
-        };
-        for event in events {
-            let _ = self.sender.send(event);
-        }
+        let mut inner = self
+            .inner
+            .lock()
+            .expect("pdu growing tree recorder poisoned");
+        inner.record_node(
+            self.session_id,
+            &self.root,
+            self.max_depth,
+            path,
+            kind,
+            raw_size,
+        );
     }
 
-    pub(crate) fn complete_node(&self, path: &Path, aggregate_size: u64) {
-        let event = {
-            let inner = self
-                .inner
-                .lock()
-                .expect("pdu growing tree recorder poisoned");
-            inner.complete_node(self.session_id, path, aggregate_size)
-        };
-        if let Some(event) = event {
-            let _ = self.sender.send(event);
-        }
+    pub(crate) fn drain_scan_event(&self, scanned_items: u64) -> Option<ScanEvent> {
+        let mut inner = self
+            .inner
+            .lock()
+            .expect("pdu growing tree recorder poisoned");
+        batch_to_scan_event(
+            self.session_id,
+            scanned_items,
+            inner.drain_regular_batch(self.session_id),
+        )
+    }
+
+    pub(crate) fn complete_root_node(
+        &self,
+        path: &Path,
+        aggregate_size: u64,
+        scanned_items: u64,
+    ) -> Option<ScanEvent> {
+        let mut inner = self
+            .inner
+            .lock()
+            .expect("pdu growing tree recorder poisoned");
+        batch_to_scan_event(
+            self.session_id,
+            scanned_items,
+            inner.complete_node(self.session_id, path, aggregate_size),
+        )
     }
 }
 
@@ -100,11 +101,13 @@ impl PduGrowingTreeState {
         path: &Path,
         kind: NodeKind,
         raw_size: u64,
-    ) -> Vec<GrowingTreeEvent> {
-        let should_materialize = should_materialize_partial_node(root, max_depth, path);
-        let mut events = Vec::new();
+    ) {
+        let should_materialize = should_materialize_partial_node(root, max_depth, path, kind);
 
-        if should_materialize && !self.nodes.contains_key(path) {
+        if should_materialize
+            && !self.nodes.contains_key(path)
+            && self.nodes.len() < MAX_MATERIALIZED_PARTIAL_NODES
+        {
             let node_id = self.next_node_id();
             let parent_id = parent_id_for(root, path, &self.nodes);
             self.nodes.insert(
@@ -114,39 +117,54 @@ impl PduGrowingTreeState {
                     aggregate_size: 0,
                 },
             );
-            events.push(GrowingTreeEvent::NodeDiscovered {
-                session_id,
-                node_id,
-                parent_id,
-                name: partial_name_for(root, path),
-                kind,
-            });
+            self.pending_discoveries
+                .push_back(GrowingTreeEvent::NodeDiscovered {
+                    session_id,
+                    node_id,
+                    parent_id,
+                    name: partial_name_for(root, path),
+                    kind,
+                });
         }
 
-        if raw_size > 0 {
-            for ancestor in materialized_ancestor_paths(root, path) {
-                let Some(record) = self.nodes.get_mut(&ancestor) else {
-                    continue;
-                };
-                record.aggregate_size = record.aggregate_size.saturating_add(raw_size);
-                events.push(GrowingTreeEvent::NodeSizeUpdated {
-                    session_id,
-                    node_id: record.node_id,
-                    aggregate_size: size_fact(record.aggregate_size),
-                    state: GrowingNodeState::Scanning,
-                });
+        if raw_size == 0 {
+            return;
+        }
+
+        for ancestor in materialized_ancestor_paths(root, path) {
+            let Some(record) = self.nodes.get_mut(&ancestor) else {
+                continue;
+            };
+            record.aggregate_size = record.aggregate_size.saturating_add(raw_size);
+            if self.dirty_path_set.insert(ancestor.clone()) {
+                self.dirty_paths.push_back(ancestor);
             }
         }
+    }
 
-        if should_materialize
-            && kind != NodeKind::Directory
-            && let Some(record) = self.nodes.get(path)
-        {
-            events.push(GrowingTreeEvent::NodeCompleted {
+    fn drain_regular_batch(&mut self, session_id: ScanSessionId) -> Vec<GrowingTreeEvent> {
+        let mut events = Vec::with_capacity(MAX_GROWING_EVENTS_PER_BATCH);
+
+        while events.len() < MAX_GROWING_EVENTS_PER_BATCH {
+            let Some(event) = self.pending_discoveries.pop_front() else {
+                break;
+            };
+            events.push(event);
+        }
+
+        while events.len() < MAX_GROWING_EVENTS_PER_BATCH {
+            let Some(path) = self.dirty_paths.pop_front() else {
+                break;
+            };
+            self.dirty_path_set.remove(&path);
+            let Some(record) = self.nodes.get(&path) else {
+                continue;
+            };
+            events.push(GrowingTreeEvent::NodeSizeUpdated {
                 session_id,
                 node_id: record.node_id,
                 aggregate_size: size_fact(record.aggregate_size),
-                child_completeness: ChildCompleteness::Complete,
+                state: GrowingNodeState::Scanning,
             });
         }
 
@@ -154,18 +172,31 @@ impl PduGrowingTreeState {
     }
 
     fn complete_node(
-        &self,
+        &mut self,
         session_id: ScanSessionId,
         path: &Path,
         aggregate_size: u64,
-    ) -> Option<GrowingTreeEvent> {
-        let record = self.nodes.get(path)?;
-        Some(GrowingTreeEvent::NodeCompleted {
-            session_id,
-            node_id: record.node_id,
-            aggregate_size: size_fact(aggregate_size),
-            child_completeness: ChildCompleteness::Complete,
-        })
+    ) -> Vec<GrowingTreeEvent> {
+        let Some(record) = self.nodes.get_mut(path) else {
+            return Vec::new();
+        };
+        record.aggregate_size = record.aggregate_size.max(aggregate_size);
+        self.dirty_path_set.remove(path);
+        self.dirty_paths.retain(|dirty| dirty != path);
+        vec![
+            GrowingTreeEvent::NodeSizeUpdated {
+                session_id,
+                node_id: record.node_id,
+                aggregate_size: size_fact(record.aggregate_size),
+                state: GrowingNodeState::Scanning,
+            },
+            GrowingTreeEvent::NodeCompleted {
+                session_id,
+                node_id: record.node_id,
+                aggregate_size: size_fact(record.aggregate_size),
+                child_completeness: ChildCompleteness::Complete,
+            },
+        ]
     }
 
     fn next_node_id(&mut self) -> PartialNodeId {
@@ -174,42 +205,30 @@ impl PduGrowingTreeState {
     }
 }
 
-pub(crate) fn drain_growing_tree_events(
-    receiver: &Receiver<GrowingTreeEvent>,
+fn batch_to_scan_event(
     session_id: ScanSessionId,
     scanned_items: u64,
-) -> Vec<ScanEvent> {
-    let mut scan_events = Vec::new();
-    let mut batch = Vec::with_capacity(MAX_GROWING_EVENTS_PER_BATCH);
-
-    while let Ok(event) = receiver.try_recv() {
-        batch.push(event);
-        if batch.len() >= MAX_GROWING_EVENTS_PER_BATCH {
-            push_batch(&mut scan_events, session_id, scanned_items, &mut batch);
-        }
+    events: Vec<GrowingTreeEvent>,
+) -> Option<ScanEvent> {
+    if events.is_empty() {
+        return None;
     }
-
-    push_batch(&mut scan_events, session_id, scanned_items, &mut batch);
-    scan_events
-}
-
-fn push_batch(
-    scan_events: &mut Vec<ScanEvent>,
-    session_id: ScanSessionId,
-    scanned_items: u64,
-    batch: &mut Vec<GrowingTreeEvent>,
-) {
-    if batch.is_empty() {
-        return;
-    }
-    let growing_batch = GrowingTreeBatch::new(session_id, scanned_items, std::mem::take(batch))
+    let growing_batch = GrowingTreeBatch::new(session_id, scanned_items, events)
         .expect("pdu growing tree events are session-scoped and non-empty");
-    scan_events.push(ScanEvent::GrowingTreeBatch {
+    Some(ScanEvent::GrowingTreeBatch {
         batch: growing_batch,
-    });
+    })
 }
 
-fn should_materialize_partial_node(root: &Path, max_depth: u64, path: &Path) -> bool {
+fn should_materialize_partial_node(
+    root: &Path,
+    max_depth: u64,
+    path: &Path,
+    kind: NodeKind,
+) -> bool {
+    if path != root && kind != NodeKind::Directory {
+        return false;
+    }
     if max_depth == u64::MAX {
         return true;
     }

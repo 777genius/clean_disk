@@ -173,14 +173,7 @@ fn pdu_backend_scans_fixture_into_product_snapshot() {
         .position(|event| matches!(event, ScanEvent::GrowingTreeBatch { .. }))
         .expect("growing tree event");
     assert!(growing_index < snapshot_index);
-    assert!(
-        events
-            .events()
-            .iter()
-            .filter_map(root_growing_size)
-            .max()
-            .is_some_and(|size| size >= 30)
-    );
+    assert!(max_root_growing_size(events.events()).is_some_and(|size| size >= 30));
 
     let search = snapshot
         .search_page(SearchQuery::new(snapshot.snapshot_id(), "cache", None, 10))
@@ -247,14 +240,44 @@ fn pdu_backend_streams_growing_tree_before_final_snapshot() {
                 }
             ))
     )));
-    assert!(
-        events
-            .events()
-            .iter()
-            .filter_map(root_growing_size)
-            .max()
-            .is_some_and(|size| size >= 30)
+    assert!(max_root_growing_size(events.events()).is_some_and(|size| size >= 30));
+    assert_eq!(discovered_file_count(events.events()), 0);
+}
+
+#[test]
+fn pdu_backend_growing_tree_does_not_stream_one_row_per_file() {
+    let fixture = TempFixture::new("pdu_growing_many_files");
+    let cache = fixture.path().join("cache");
+    fs::create_dir_all(&cache).expect("cache dir");
+    for index in 0..512 {
+        fs::write(cache.join(format!("file-{index}.bin")), [1_u8; 32]).expect("cache file");
+    }
+
+    let session_id = ScanSessionId::new(210).expect("session id");
+    let backend = PduScannerBackend::with_progress_emit_interval(
+        PduScannerBackend::DEFAULT_MAX_DEPTH,
+        std::time::Duration::from_millis(1),
     );
+    let cancellation = CancellationToken::new();
+    let mut events = VecEventSink::default();
+    let mut session = ScanSession::new(session_id);
+
+    session
+        .start(
+            &backend,
+            request(session_id, fixture.path().clone()),
+            &mut events,
+            &cancellation,
+        )
+        .expect("pdu scan succeeds");
+
+    let discovered = discovered_node_count(events.events());
+    assert!(
+        discovered <= 2,
+        "expected root and cache only, got {discovered}"
+    );
+    assert_eq!(discovered_file_count(events.events()), 0);
+    assert!(max_root_growing_size(events.events()).is_some_and(|size| size >= 16_384));
 }
 
 #[test]
@@ -411,14 +434,7 @@ fn pdu_backend_marks_depth_limited_tree_as_collapsed() {
             .iter()
             .any(|issue| issue.code() == IssueCode::BackendLimitation)
     );
-    assert!(
-        events
-            .events()
-            .iter()
-            .filter_map(root_growing_size)
-            .max()
-            .is_some_and(|size| size >= 10)
-    );
+    assert!(max_root_growing_size(events.events()).is_some_and(|size| size >= 10));
     assert!(!events.events().iter().any(|event| matches!(
         event,
         ScanEvent::GrowingTreeBatch { batch }
@@ -432,35 +448,80 @@ fn pdu_backend_marks_depth_limited_tree_as_collapsed() {
     )));
 }
 
-fn root_growing_size(event: &ScanEvent) -> Option<u64> {
-    let ScanEvent::GrowingTreeBatch { batch } = event else {
-        return None;
-    };
-    let root_id = batch.events().iter().find_map(|event| match event {
-        fs_usage_engine::GrowingTreeEvent::NodeDiscovered {
-            parent_id: None,
-            node_id,
-            ..
-        } => Some(*node_id),
-        _ => None,
-    })?;
-    batch
-        .events()
-        .iter()
-        .filter_map(|event| match event {
-            fs_usage_engine::GrowingTreeEvent::NodeSizeUpdated {
-                node_id,
-                aggregate_size,
-                ..
+fn max_root_growing_size(events: &[ScanEvent]) -> Option<u64> {
+    let mut root_id = None;
+    let mut max_size = None;
+
+    for event in events {
+        let ScanEvent::GrowingTreeBatch { batch } = event else {
+            continue;
+        };
+        for growing in batch.events() {
+            match growing {
+                fs_usage_engine::GrowingTreeEvent::NodeDiscovered {
+                    parent_id: None,
+                    node_id,
+                    ..
+                } => root_id = Some(*node_id),
+                fs_usage_engine::GrowingTreeEvent::NodeSizeUpdated {
+                    node_id,
+                    aggregate_size,
+                    ..
+                }
+                | fs_usage_engine::GrowingTreeEvent::NodeCompleted {
+                    node_id,
+                    aggregate_size,
+                    ..
+                } if Some(*node_id) == root_id => {
+                    max_size = Some(max_size.unwrap_or(0).max(aggregate_size.raw_value()));
+                }
+                _ => {}
             }
-            | fs_usage_engine::GrowingTreeEvent::NodeCompleted {
-                node_id,
-                aggregate_size,
-                ..
-            } if *node_id == root_id => Some(aggregate_size.raw_value()),
-            _ => None,
+        }
+    }
+
+    max_size
+}
+
+fn discovered_node_count(events: &[ScanEvent]) -> usize {
+    events
+        .iter()
+        .map(|event| match event {
+            ScanEvent::GrowingTreeBatch { batch } => batch
+                .events()
+                .iter()
+                .filter(|event| {
+                    matches!(
+                        event,
+                        fs_usage_engine::GrowingTreeEvent::NodeDiscovered { .. }
+                    )
+                })
+                .count(),
+            _ => 0,
         })
-        .max()
+        .sum()
+}
+
+fn discovered_file_count(events: &[ScanEvent]) -> usize {
+    events
+        .iter()
+        .map(|event| match event {
+            ScanEvent::GrowingTreeBatch { batch } => batch
+                .events()
+                .iter()
+                .filter(|event| {
+                    matches!(
+                        event,
+                        fs_usage_engine::GrowingTreeEvent::NodeDiscovered {
+                            kind: NodeKind::File,
+                            ..
+                        }
+                    )
+                })
+                .count(),
+            _ => 0,
+        })
+        .sum()
 }
 
 #[cfg(unix)]

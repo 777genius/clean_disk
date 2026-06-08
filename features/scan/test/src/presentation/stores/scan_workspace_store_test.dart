@@ -703,6 +703,45 @@ void main() {
     },
   );
 
+  test('caps growing tree preview rows during large running scans', () async {
+    final repository = _FakeScanRepository();
+    final eventClient = _FakeScanEventClient();
+    final store = _store(repository, eventClient);
+
+    await store.start(_startCommand());
+
+    store.reconcileEvent(
+      ScanEventEnvelope(
+        protocolVersion: ProtocolVersion.current,
+        sequence: EventSequence('12'),
+        emittedAtUnixMs: BigInt.from(12),
+        event: ScanGrowingTreeBatch(
+          sessionId: ScanSessionId('1'),
+          scannedItems: BigInt.from(220),
+          events: [
+            GrowingNodeDiscovered(
+              nodeId: PartialNodeId('1'),
+              parentId: null,
+              name: 'Library',
+              kind: NodeKind.directory,
+            ),
+            for (var index = 2; index <= 220; index++)
+              GrowingNodeDiscovered(
+                nodeId: PartialNodeId('$index'),
+                parentId: PartialNodeId('1'),
+                name: 'Folder $index',
+                kind: NodeKind.directory,
+              ),
+          ],
+        ),
+      ),
+    );
+
+    expect(store.hasPartialScanTree, isTrue);
+    expect(store.partialVisibleTreeRows, hasLength(160));
+    expect(store.partialVisibleRows, hasLength(160));
+  });
+
   test(
     'disposes previous daemon session before starting replacement scan',
     () async {

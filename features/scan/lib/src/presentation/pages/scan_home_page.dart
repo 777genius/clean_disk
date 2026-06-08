@@ -1222,7 +1222,7 @@ class _TargetChoiceRow extends StatelessWidget {
   }
 }
 
-class _WideWorkspace extends StatelessWidget {
+class _WideWorkspace extends StatefulWidget {
   const _WideWorkspace({
     required this.store,
     required this.activeTarget,
@@ -1268,57 +1268,76 @@ class _WideWorkspace extends StatelessWidget {
   final VoidCallback onToggleDetailsPane;
 
   @override
+  State<_WideWorkspace> createState() => _WideWorkspaceState();
+}
+
+class _WideWorkspaceState extends State<_WideWorkspace> {
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final showDetailsPane =
-        store.hasReadableSnapshot || store.selectedNodeId != null;
+        widget.store.hasReadableSnapshot || widget.store.selectedNodeId != null;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(
           key: const ValueKey('scan-target-rail'),
-          width: _targetRailWidth,
+          width: _WideWorkspace._targetRailWidth,
           child: _TargetRail(
-            store: store,
-            activeTarget: activeTarget,
-            canChangeTarget: canChangeTarget,
-            onPickTarget: onPickTarget,
-            onChooseTarget: onChooseTarget,
-            onPermissionProbe: onPermissionProbe,
-            onPermissionRepair: onPermissionRepair,
+            store: widget.store,
+            activeTarget: widget.activeTarget,
+            canChangeTarget: widget.canChangeTarget,
+            onPickTarget: widget.onPickTarget,
+            onChooseTarget: widget.onChooseTarget,
+            onPermissionProbe: widget.onPermissionProbe,
+            onPermissionRepair: widget.onPermissionRepair,
           ),
         ),
         const _Divider.vertical(),
         Expanded(
           child: Scrollbar(
+            controller: _scrollController,
+            notificationPredicate: (notification) => notification.depth == 0,
             child: SingleChildScrollView(
+              controller: _scrollController,
               padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
               child: Column(
                 children: [
-                  if (_shouldShowMetricStrip(store)) ...[
-                    _MetricStrip(store: store),
+                  if (_shouldShowMetricStrip(widget.store)) ...[
+                    _MetricStrip(store: widget.store),
                     const SizedBox(height: 8),
                   ],
-                  if (_shouldShowDiskUsageMap(store, diskUsageMapRenderer)) ...[
+                  if (_shouldShowDiskUsageMap(
+                    widget.store,
+                    widget.diskUsageMapRenderer,
+                  )) ...[
                     _DiskUsageMapPanel(
-                      store: store,
-                      activeTarget: activeTarget,
-                      renderer: diskUsageMapRenderer!,
-                      collapsed: diskUsageMapCollapsed,
+                      store: widget.store,
+                      activeTarget: widget.activeTarget,
+                      renderer: widget.diskUsageMapRenderer!,
+                      collapsed: widget.diskUsageMapCollapsed,
                       compact: false,
-                      onToggle: onToggleDiskUsageMap,
-                      onStoreChanged: onStoreChanged,
+                      onToggle: widget.onToggleDiskUsageMap,
+                      onStoreChanged: widget.onStoreChanged,
                     ),
                     const SizedBox(height: 8),
                   ],
                   _NodeTable(
-                    store: store,
-                    activeTarget: activeTarget,
-                    onScan: onScan,
+                    store: widget.store,
+                    activeTarget: widget.activeTarget,
+                    onScan: widget.onScan,
                     showEmptyScanAction: false,
-                    onRefreshFolderTarget: onRefreshFolderTarget,
-                    onClearSearch: onClearSearch,
-                    onStoreChanged: onStoreChanged,
+                    onRefreshFolderTarget: widget.onRefreshFolderTarget,
+                    onClearSearch: widget.onClearSearch,
+                    onStoreChanged: widget.onStoreChanged,
                     rowsScrollable: false,
                   ),
                 ],
@@ -1333,19 +1352,21 @@ class _WideWorkspace extends StatelessWidget {
             curve: Curves.easeOutCubic,
             alignment: Alignment.centerRight,
             child: SizedBox(
-              width: detailsPaneCollapsed
-                  ? _collapsedDetailsPaneWidth
-                  : _detailsPaneWidth,
+              width: widget.detailsPaneCollapsed
+                  ? _WideWorkspace._collapsedDetailsPaneWidth
+                  : _WideWorkspace._detailsPaneWidth,
               child: ClipRect(
-                child: detailsPaneCollapsed
-                    ? _CollapsedDetailsRail(onExpand: onToggleDetailsPane)
+                child: widget.detailsPaneCollapsed
+                    ? _CollapsedDetailsRail(
+                        onExpand: widget.onToggleDetailsPane,
+                      )
                     : _DetailsPane(
-                        store: store,
-                        activeTarget: activeTarget,
-                        onRefreshCleanupPreview: onRefreshCleanupPreview,
-                        onExecuteCleanup: onExecuteCleanup,
-                        onStoreChanged: onStoreChanged,
-                        onCollapse: onToggleDetailsPane,
+                        store: widget.store,
+                        activeTarget: widget.activeTarget,
+                        onRefreshCleanupPreview: widget.onRefreshCleanupPreview,
+                        onExecuteCleanup: widget.onExecuteCleanup,
+                        onStoreChanged: widget.onStoreChanged,
+                        onCollapse: widget.onToggleDetailsPane,
                       ),
               ),
             ),

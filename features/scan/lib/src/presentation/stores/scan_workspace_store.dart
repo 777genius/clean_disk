@@ -32,6 +32,7 @@ enum ScanPageLoadState { idle, loading, failed }
 enum ScanQueryMode { children, search, topItems }
 
 const _diskUsageMapRequestedLimit = 512;
+const _partialScanPreviewRowLimit = 160;
 
 final class ScanTreeNodeRow {
   const ScanTreeNodeRow({
@@ -381,7 +382,15 @@ final class ScanWorkspaceStore with Store {
 
     final rows = <PartialScanTreeNodeRow>[];
     for (final rootId in _partialRootNodeIds) {
-      _appendPartialVisibleTreeRows(rows: rows, nodeId: rootId, depth: 0);
+      if (rows.length >= _partialScanPreviewRowLimit) {
+        break;
+      }
+      _appendPartialVisibleTreeRows(
+        rows: rows,
+        nodeId: rootId,
+        depth: 0,
+        limit: _partialScanPreviewRowLimit,
+      );
     }
     return List.unmodifiable(rows);
   }
@@ -2038,17 +2047,25 @@ final class ScanWorkspaceStore with Store {
     required List<PartialScanTreeNodeRow> rows,
     required PartialNodeId nodeId,
     required int depth,
+    required int limit,
   }) {
+    if (rows.length >= limit) {
+      return;
+    }
     final node = _partialNodesById[nodeId];
     if (node == null) {
       return;
     }
     rows.add(PartialScanTreeNodeRow(item: node, depth: depth));
     for (final childId in _partialChildrenByParent[nodeId] ?? const []) {
+      if (rows.length >= limit) {
+        break;
+      }
       _appendPartialVisibleTreeRows(
         rows: rows,
         nodeId: childId,
         depth: depth + 1,
+        limit: limit,
       );
     }
   }

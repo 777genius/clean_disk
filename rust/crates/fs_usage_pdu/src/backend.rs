@@ -1,6 +1,6 @@
 use crate::{
     converter::{PduNodeName, PduTreeConverter},
-    growing::{PduGrowingTreeRecorder, drain_growing_tree_events},
+    growing::PduGrowingTreeRecorder,
     options::PduOptionsMapper,
     reporter::PduReporterRecorder,
 };
@@ -21,10 +21,7 @@ use parallel_disk_usage::{
 use std::{
     fs::{FileType, Metadata, read_dir, symlink_metadata},
     path::{Path, PathBuf},
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        mpsc::Receiver,
-    },
+    sync::atomic::{AtomicU64, Ordering},
     thread,
     time::Duration,
 };
@@ -90,7 +87,7 @@ impl ScannerBackend for PduScannerBackend {
         let root_path = options.root().to_path_buf();
         let device_boundary = options.device_boundary();
         let max_depth = options.max_depth();
-        let (growing_recorder, growing_receiver) =
+        let growing_recorder =
             PduGrowingTreeRecorder::new(request.session_id(), root_path.clone(), max_depth);
         let mut last_progress = 0;
         let tree: DataTree<PduNodeName, Bytes> = thread::scope(|scope| {
@@ -107,9 +104,8 @@ impl ScannerBackend for PduScannerBackend {
                 thread::sleep(self.progress_emit_interval);
                 drain_and_emit_growing_tree_events(
                     events,
-                    request.session_id(),
                     &reporter,
-                    &growing_receiver,
+                    &growing_recorder,
                     cancellation,
                 );
                 if !cancellation.is_canceled() {
@@ -126,12 +122,14 @@ impl ScannerBackend for PduScannerBackend {
                 .map_err(|_| ScanFailure::Backend("pdu scan worker panicked".to_string()))
         })?;
 
-        emit_final_root_completion_event(&tree, &root_path, &growing_recorder);
-        drain_and_emit_growing_tree_events(
+        drain_and_emit_growing_tree_events(events, &reporter, &growing_recorder, cancellation);
+        emit_final_root_completion_event(
             events,
             request.session_id(),
             &reporter,
-            &growing_receiver,
+            &tree,
+            &root_path,
+            &growing_recorder,
             cancellation,
         );
 
@@ -161,17 +159,16 @@ impl ScannerBackend for PduScannerBackend {
 
 fn drain_and_emit_growing_tree_events(
     events: &mut dyn EventSink,
-    session_id: ScanSessionId,
     reporter: &PduReporterRecorder,
-    growing_receiver: &Receiver<fs_usage_engine::GrowingTreeEvent>,
+    growing_recorder: &PduGrowingTreeRecorder,
     cancellation: &CancellationToken,
 ) {
     let scanned_items = reporter.received_data_count();
-    let scan_events = drain_growing_tree_events(growing_receiver, session_id, scanned_items);
+    let scan_event = growing_recorder.drain_scan_event(scanned_items);
     if cancellation.is_canceled() {
         return;
     }
-    for event in scan_events {
+    if let Some(event) = scan_event {
         events.emit(event);
     }
 }
@@ -285,11 +282,24 @@ fn build_pdu_tree(
 }
 
 fn emit_final_root_completion_event(
+    events: &mut dyn EventSink,
+    _session_id: ScanSessionId,
+    reporter: &PduReporterRecorder,
     tree: &DataTree<PduNodeName, Bytes>,
     root: &Path,
     growing_recorder: &PduGrowingTreeRecorder,
+    cancellation: &CancellationToken,
 ) {
-    growing_recorder.complete_node(root, tree.size().into());
+    if cancellation.is_canceled() {
+        return;
+    }
+    if let Some(event) = growing_recorder.complete_root_node(
+        root,
+        tree.size().into(),
+        reporter.received_data_count(),
+    ) {
+        events.emit(event);
+    }
 }
 
 fn classify_metadata(metadata: &Metadata) -> NodeKind {
