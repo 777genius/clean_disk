@@ -1,9 +1,10 @@
 use crate::{
     converter::{PduNodeName, PduTreeConverter},
+    growing::{PduGrowingTreeRecorder, drain_growing_tree_events},
     options::PduOptionsMapper,
     reporter::PduReporterRecorder,
 };
-use fs_usage_core::{CapabilitySet, NodeKind, SupportLevel};
+use fs_usage_core::{CapabilitySet, NodeKind, ScanSessionId, SupportLevel};
 use fs_usage_engine::{
     BackendRunId, BackendScanOutput, BackendScanRequest, CancellationToken, EventSink, ScanEvent,
     ScanFailure, ScanSnapshotDraft, ScannerBackend, ScannerBackendCapabilities,
@@ -20,7 +21,10 @@ use parallel_disk_usage::{
 use std::{
     fs::{FileType, Metadata, read_dir, symlink_metadata},
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc::Receiver,
+    },
     thread,
     time::Duration,
 };
@@ -86,12 +90,28 @@ impl ScannerBackend for PduScannerBackend {
         let root_path = options.root().to_path_buf();
         let device_boundary = options.device_boundary();
         let max_depth = options.max_depth();
+        let (growing_recorder, growing_receiver) =
+            PduGrowingTreeRecorder::new(request.session_id(), root_path.clone(), max_depth);
         let mut last_progress = 0;
         let tree: DataTree<PduNodeName, Bytes> = thread::scope(|scope| {
-            let handle =
-                scope.spawn(|| build_pdu_tree(&root_path, device_boundary, max_depth, &reporter));
+            let handle = scope.spawn(|| {
+                build_pdu_tree(
+                    &root_path,
+                    device_boundary,
+                    max_depth,
+                    &reporter,
+                    &growing_recorder,
+                )
+            });
             while !handle.is_finished() {
                 thread::sleep(self.progress_emit_interval);
+                drain_and_emit_growing_tree_events(
+                    events,
+                    request.session_id(),
+                    &reporter,
+                    &growing_receiver,
+                    cancellation,
+                );
                 if !cancellation.is_canceled() {
                     emit_progress_if_changed(
                         events,
@@ -105,6 +125,15 @@ impl ScannerBackend for PduScannerBackend {
                 .join()
                 .map_err(|_| ScanFailure::Backend("pdu scan worker panicked".to_string()))
         })?;
+
+        emit_final_root_completion_event(&tree, &root_path, &growing_recorder);
+        drain_and_emit_growing_tree_events(
+            events,
+            request.session_id(),
+            &reporter,
+            &growing_receiver,
+            cancellation,
+        );
 
         if cancellation.is_canceled() {
             return Err(ScanFailure::Canceled);
@@ -130,9 +159,26 @@ impl ScannerBackend for PduScannerBackend {
     }
 }
 
+fn drain_and_emit_growing_tree_events(
+    events: &mut dyn EventSink,
+    session_id: ScanSessionId,
+    reporter: &PduReporterRecorder,
+    growing_receiver: &Receiver<fs_usage_engine::GrowingTreeEvent>,
+    cancellation: &CancellationToken,
+) {
+    let scanned_items = reporter.received_data_count();
+    let scan_events = drain_growing_tree_events(growing_receiver, session_id, scanned_items);
+    if cancellation.is_canceled() {
+        return;
+    }
+    for event in scan_events {
+        events.emit(event);
+    }
+}
+
 fn emit_progress_if_changed(
     events: &mut dyn EventSink,
-    session_id: fs_usage_core::ScanSessionId,
+    session_id: ScanSessionId,
     reporter: &PduReporterRecorder,
     last_progress: &mut u64,
 ) {
@@ -152,6 +198,7 @@ fn build_pdu_tree(
     device_boundary: DeviceBoundary,
     max_depth: u64,
     reporter: &PduReporterRecorder,
+    growing_recorder: &PduGrowingTreeRecorder,
 ) -> DataTree<PduNodeName, Bytes> {
     let root_metadata = symlink_metadata(root);
     let root_device = match (device_boundary, root_metadata.as_ref()) {
@@ -188,6 +235,7 @@ fn build_pdu_tree(
                         root_device.is_none_or(|root_device| device_id(&metadata) == root_device);
                     let size = GetApparentSize.get_size(&metadata);
                     reporter.report(Event::ReceiveData(size));
+                    growing_recorder.record_node(path, kind, size.into());
                     (kind, size, same_device)
                 }
             };
@@ -236,6 +284,14 @@ fn build_pdu_tree(
     .into()
 }
 
+fn emit_final_root_completion_event(
+    tree: &DataTree<PduNodeName, Bytes>,
+    root: &Path,
+    growing_recorder: &PduGrowingTreeRecorder,
+) {
+    growing_recorder.complete_node(root, tree.size().into());
+}
+
 fn classify_metadata(metadata: &Metadata) -> NodeKind {
     classify_file_type(&metadata.file_type())
 }
@@ -279,7 +335,7 @@ fn pdu_capabilities() -> ScannerBackendCapabilities {
             SupportLevel::Supported,
             SupportLevel::Unsupported,
             SupportLevel::Unsupported,
-            SupportLevel::Unsupported,
+            SupportLevel::Supported,
         ),
     )
 }

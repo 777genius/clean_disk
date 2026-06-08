@@ -11,8 +11,8 @@ use clean_disk_protocol::{
     PROTOCOL_VERSION, PackageModeDto, PermissionProbeDto, PermissionProbeRequestDto,
     PermissionProbeStatusDto, PermissionRequiredActionDto, ProtocolVersionDto, RawPathDto,
     ScanModeDto, ScanSessionStatusDto, ScanTargetDto, ScannerIdentityVerificationDto,
-    SearchPageRequestDto, SearchTextDto, SessionStateDto, StartScanRequestDto, TargetScopeDto,
-    TopItemsKindDto, TopItemsRequestDto,
+    SearchPageRequestDto, SearchTextDto, SessionStateDto, StartScanRequestDto, SupportLevelDto,
+    TargetScopeDto, TopItemsKindDto, TopItemsRequestDto,
 };
 use clean_disk_server::{AppState, ServerConfig, build_router};
 use fs_usage_engine::{FakeScannerBackend, ScanResourceProfile, WorkerBudget};
@@ -176,6 +176,13 @@ async fn capability_endpoint_reports_unverified_runtime_proof_until_probe_runs()
             .packaging()
             .update_safety()
             .quiesce_required_before_update()
+    );
+    assert_eq!(
+        capabilities
+            .scanner()
+            .capabilities()
+            .growing_tree_streaming(),
+        SupportLevelDto::Supported
     );
 }
 

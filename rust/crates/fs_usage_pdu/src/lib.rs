@@ -2,6 +2,7 @@
 
 mod backend;
 mod converter;
+mod growing;
 mod options;
 mod reporter;
 

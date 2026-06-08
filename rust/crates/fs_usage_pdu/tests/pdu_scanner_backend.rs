@@ -1,6 +1,6 @@
 use fs_usage_core::{
     BoundaryPolicy, ChildCompleteness, HardlinkPolicy, IssueCode, MeasuredQuantity, NodeKind,
-    ScanSessionId, ScanTarget, TargetPath, TargetScope,
+    ScanSessionId, ScanTarget, SupportLevel, TargetPath, TargetScope,
 };
 use fs_usage_engine::{
     CancellationToken, ChildrenPageQuery, EventSink, ScanEvent, ScanFailure, ScanSession,
@@ -134,6 +134,14 @@ fn pdu_backend_scans_fixture_into_product_snapshot() {
             .backend_name(),
         "parallel-disk-usage"
     );
+    assert_eq!(
+        session
+            .backend_capabilities()
+            .expect("capabilities")
+            .capabilities()
+            .growing_tree_streaming(),
+        SupportLevel::Supported
+    );
     let snapshot = session.snapshot().expect("snapshot");
     assert_eq!(snapshot.root_ids().len(), 1);
 
@@ -159,6 +167,20 @@ fn pdu_backend_scans_fixture_into_product_snapshot() {
         .position(|event| matches!(event, ScanEvent::SnapshotPublished { .. }))
         .expect("snapshot event");
     assert!(progress_index < snapshot_index);
+    let growing_index = events
+        .events()
+        .iter()
+        .position(|event| matches!(event, ScanEvent::GrowingTreeBatch { .. }))
+        .expect("growing tree event");
+    assert!(growing_index < snapshot_index);
+    assert!(
+        events
+            .events()
+            .iter()
+            .filter_map(root_growing_size)
+            .max()
+            .is_some_and(|size| size >= 30)
+    );
 
     let search = snapshot
         .search_page(SearchQuery::new(snapshot.snapshot_id(), "cache", None, 10))
@@ -175,6 +197,64 @@ fn pdu_backend_scans_fixture_into_product_snapshot() {
         .expect("top page");
     assert_eq!(top.items.len(), 2);
     assert_eq!(top.items[0].name(), "b.log");
+}
+
+#[test]
+fn pdu_backend_streams_growing_tree_before_final_snapshot() {
+    let fixture = TempFixture::new("pdu_growing");
+    fs::create_dir_all(fixture.path().join("cache")).expect("cache dir");
+    fs::write(fixture.path().join("cache/a.bin"), [1_u8; 10]).expect("cache file");
+    fs::write(fixture.path().join("cache/b.bin"), [2_u8; 20]).expect("cache file");
+
+    let session_id = ScanSessionId::new(209).expect("session id");
+    let backend = PduScannerBackend::with_progress_emit_interval(
+        PduScannerBackend::DEFAULT_MAX_DEPTH,
+        std::time::Duration::from_millis(1),
+    );
+    let cancellation = CancellationToken::new();
+    let mut events = VecEventSink::default();
+    let mut session = ScanSession::new(session_id);
+
+    session
+        .start(
+            &backend,
+            request(session_id, fixture.path().clone()),
+            &mut events,
+            &cancellation,
+        )
+        .expect("pdu scan succeeds");
+
+    let snapshot_index = events
+        .events()
+        .iter()
+        .position(|event| matches!(event, ScanEvent::SnapshotPublished { .. }))
+        .expect("snapshot event");
+    let growing_index = events
+        .events()
+        .iter()
+        .position(|event| matches!(event, ScanEvent::GrowingTreeBatch { .. }))
+        .expect("growing tree batch");
+
+    assert!(growing_index < snapshot_index);
+    assert!(events.events().iter().any(|event| matches!(
+        event,
+        ScanEvent::GrowingTreeBatch { batch }
+            if batch.events().iter().any(|growing| matches!(
+                growing,
+                fs_usage_engine::GrowingTreeEvent::NodeDiscovered {
+                    parent_id: Some(_),
+                    ..
+                }
+            ))
+    )));
+    assert!(
+        events
+            .events()
+            .iter()
+            .filter_map(root_growing_size)
+            .max()
+            .is_some_and(|size| size >= 30)
+    );
 }
 
 #[test]
@@ -331,6 +411,56 @@ fn pdu_backend_marks_depth_limited_tree_as_collapsed() {
             .iter()
             .any(|issue| issue.code() == IssueCode::BackendLimitation)
     );
+    assert!(
+        events
+            .events()
+            .iter()
+            .filter_map(root_growing_size)
+            .max()
+            .is_some_and(|size| size >= 10)
+    );
+    assert!(!events.events().iter().any(|event| matches!(
+        event,
+        ScanEvent::GrowingTreeBatch { batch }
+            if batch.events().iter().any(|growing| matches!(
+                growing,
+                fs_usage_engine::GrowingTreeEvent::NodeDiscovered {
+                    parent_id: Some(_),
+                    ..
+                }
+            ))
+    )));
+}
+
+fn root_growing_size(event: &ScanEvent) -> Option<u64> {
+    let ScanEvent::GrowingTreeBatch { batch } = event else {
+        return None;
+    };
+    let root_id = batch.events().iter().find_map(|event| match event {
+        fs_usage_engine::GrowingTreeEvent::NodeDiscovered {
+            parent_id: None,
+            node_id,
+            ..
+        } => Some(*node_id),
+        _ => None,
+    })?;
+    batch
+        .events()
+        .iter()
+        .filter_map(|event| match event {
+            fs_usage_engine::GrowingTreeEvent::NodeSizeUpdated {
+                node_id,
+                aggregate_size,
+                ..
+            }
+            | fs_usage_engine::GrowingTreeEvent::NodeCompleted {
+                node_id,
+                aggregate_size,
+                ..
+            } if *node_id == root_id => Some(aggregate_size.raw_value()),
+            _ => None,
+        })
+        .max()
 }
 
 #[cfg(unix)]

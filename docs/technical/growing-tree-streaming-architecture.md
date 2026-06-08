@@ -97,14 +97,32 @@ a pdu patch, a custom scanner, platform scanner, or future pdu API.
 Owns pdu translation only.
 
 Current `parallel-disk-usage 0.24.0` does not expose path-bearing node streaming
-callbacks. Therefore the pdu adapter reports:
+callbacks as a named public product API. However our adapter already owns the
+`TreeBuilder::get_info` closure used for pdu traversal. That closure sees each
+visited path, node kind, and local metadata size. `fs_usage_pdu` converts that
+adapter-private traversal evidence into `GrowingTreeEvent` batches through a
+bounded channel and reports:
 
 ```text
-growing_tree_streaming = unsupported
+growing_tree_streaming = supported
 ```
 
-If pdu later adds streaming callbacks, only `fs_usage_pdu` should change to map
-that API into `GrowingTreeEvent` batches.
+Current pdu-backed growing tree semantics:
+
+- partial nodes are discovered as pdu visits paths;
+- directory aggregate sizes grow by adding each visited descendant size to its
+  materialized ancestors;
+- max-depth is respected for partial node materialization, while skipped deeper
+  descendants still contribute to visible ancestor sizes;
+- file-like nodes may complete as soon as their metadata size is known;
+- the root may receive a final completion update immediately before snapshot
+  publication, but the adapter must not replay completion for every final node
+  in a huge tree because the final snapshot replaces the partial view;
+- cancellation is still not fully cooperative because pdu traversal may continue
+  until the current worker finishes.
+
+If pdu later adds stronger streaming callbacks, only `fs_usage_pdu` should change
+to map that API into the same `GrowingTreeEvent` batches.
 
 ### clean-disk-server
 
@@ -160,8 +178,8 @@ GrowingTreeBatchPublished
   events[]
 ```
 
-This event should be optional and capability-gated. Clients that do not
-understand it must keep using progress events and final snapshot queries.
+This event is optional and capability-gated. Clients that do not understand it
+must keep using progress events and final snapshot queries.
 
 ## UI Semantics
 
@@ -237,7 +255,8 @@ Stop implementation if any of these happen:
 5. Add TreeTable visual state for partial/scanning/complete rows.
 6. Coalesce replay/runtime buffers so growing batches behave as bounded
    progress hints, not unbounded history.
-7. Add pdu fork/upstream spike or custom scanner adapter for real events.
+7. Add pdu-backed growing events through adapter-private `TreeBuilder`
+   traversal evidence.
 8. Run large-tree UI and backpressure benchmarks.
 
 Current repository state:
@@ -249,6 +268,9 @@ Current repository state:
 - The scan table can render running partial rows but disables selection,
   context menu, and cleanup authority for them.
 - Rust and Flutter fake adapters can publish deterministic growing batches.
-- `parallel-disk-usage` remains a final-tree adapter and reports growing tree
-  streaming as unsupported until a real pdu fork/upstream/custom streaming
-  scanner adapter exists.
+- `parallel-disk-usage` remains private to `fs_usage_pdu`, but the pdu adapter
+  now emits real growing batches before final snapshot publication using its
+  adapter-owned traversal closure.
+- Future pdu upstream callbacks, a pdu fork, or a custom scanner can replace the
+  adapter internals without changing engine, server protocol, or Flutter
+  contracts.

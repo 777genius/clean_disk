@@ -455,4 +455,8 @@ impl CapabilityResponseDto {
     pub const fn runtime_proof(&self) -> &RuntimeProofDto {
         &self.runtime_proof
     }
+
+    pub const fn scanner(&self) -> &ScannerCapabilityDto {
+        &self.scanner
+    }
 }
