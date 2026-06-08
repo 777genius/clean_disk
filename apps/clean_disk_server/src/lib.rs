@@ -462,6 +462,10 @@ impl SessionRegistry {
 
     fn push_event(&self, session_id: ScanSessionId, event: ScanEvent) {
         let mut event_was_recorded = false;
+        let growing_tree_session_id = match &event {
+            ScanEvent::GrowingTreeBatch { batch } => Some(batch.session_id()),
+            _ => None,
+        };
         {
             let mut sessions = self.sessions.lock().expect("session registry poisoned");
             if let Some(record) = sessions.get_mut(&session_id.get()) {
@@ -473,6 +477,13 @@ impl SessionRegistry {
         if event_was_recorded {
             let envelope = self.next_event_envelope(event);
             let mut event_log = self.event_log.lock().expect("event log poisoned");
+            if let Some(growing_tree_session_id) = growing_tree_session_id
+                && let Some(position) = event_log.iter().rposition(|envelope| {
+                    is_growing_tree_batch_for_session(envelope, growing_tree_session_id)
+                })
+            {
+                event_log.remove(position);
+            }
             if event_log.len() >= self.event_buffer_limit {
                 event_log.pop_front();
             }
@@ -649,6 +660,19 @@ impl SessionRegistry {
             stored_cursors: self.cursors.lock().expect("cursor registry poisoned").len(),
         }
     }
+}
+
+fn is_growing_tree_batch_for_session(
+    envelope: &ScanEventEnvelopeDto,
+    session_id: ScanSessionId,
+) -> bool {
+    matches!(
+        envelope.event(),
+        ScanEventDto::GrowingTreeBatch {
+            session_id: event_session_id,
+            ..
+        } if event_session_id.to_u128() == session_id.get()
+    )
 }
 
 #[derive(Debug)]
@@ -3203,6 +3227,11 @@ fn latest_progress(record: &SessionRecord) -> Option<ScanProgressDto> {
                 Some(elapsed_ms.clone()),
                 None,
             )),
+            ScanEvent::GrowingTreeBatch { batch } => Some(ScanProgressDto::new(
+                DecimalU64Dto::from_u64(batch.scanned_items()),
+                Some(elapsed_ms.clone()),
+                None,
+            )),
             _ => None,
         })
 }
@@ -3433,8 +3462,14 @@ mod tests {
         body::{Body, to_bytes},
         http::Request,
     };
-    use fs_usage_core::{EvidenceConfidence, MeasuredQuantity, SizeBytes, SizeFact};
-    use fs_usage_engine::{DraftNode, FakeScannerBackend, ScanSnapshotDraft};
+    use fs_usage_core::{
+        ChildCompleteness, EvidenceConfidence, MeasuredQuantity, NodeKind, PartialNodeId,
+        SizeBytes, SizeFact,
+    };
+    use fs_usage_engine::{
+        DraftNode, FakeScannerBackend, GrowingTreeBatch, GrowingTreeEvent, PartialNodeName,
+        ScanSnapshotDraft,
+    };
     use fs_usage_platform::{TrashOutcome, path_identity_evidence};
     use std::time::Duration;
     use tower::ServiceExt;
@@ -3585,6 +3620,31 @@ mod tests {
         )
     }
 
+    fn growing_tree_batch_event(session_id: ScanSessionId, scanned_items: u64) -> ScanEvent {
+        let node_id = PartialNodeId::new(1).expect("partial node id");
+        let batch = GrowingTreeBatch::new(
+            session_id,
+            scanned_items,
+            vec![
+                GrowingTreeEvent::NodeDiscovered {
+                    session_id,
+                    node_id,
+                    parent_id: None,
+                    name: PartialNodeName::new("root").expect("name"),
+                    kind: NodeKind::Directory,
+                },
+                GrowingTreeEvent::NodeCompleted {
+                    session_id,
+                    node_id,
+                    aggregate_size: size(scanned_items),
+                    child_completeness: ChildCompleteness::Complete,
+                },
+            ],
+        )
+        .expect("growing tree batch");
+        ScanEvent::GrowingTreeBatch { batch }
+    }
+
     #[test]
     fn event_replay_keeps_stable_sequences_across_reconnects() {
         let budget = WorkerBudget::for_profile_with_parallelism(
@@ -3631,6 +3691,32 @@ mod tests {
     }
 
     #[test]
+    fn event_replay_coalesces_growing_tree_batches_per_session() {
+        let budget = WorkerBudget::for_profile_with_parallelism(
+            ScanResourceProfile::Balanced,
+            std::num::NonZeroUsize::new(4).expect("cores"),
+        );
+        let registry = SessionRegistry::new(budget, 8, 1);
+        let session_id = ScanSessionId::new(1).expect("session id");
+        registry.insert_running(session_id, CancellationToken::new());
+        registry.push_event(session_id, ScanEvent::Started { session_id });
+        registry.push_event(session_id, growing_tree_batch_event(session_id, 10));
+        registry.push_event(session_id, growing_tree_batch_event(session_id, 20));
+
+        let replay = registry.event_envelopes();
+
+        assert_eq!(replay.len(), 2);
+        assert_eq!(replay[0].sequence().to_u64(), 1);
+        assert_eq!(replay[1].sequence().to_u64(), 3);
+        match replay[1].event() {
+            ScanEventDto::GrowingTreeBatch { scanned_items, .. } => {
+                assert_eq!(scanned_items.to_u64(), 20);
+            }
+            other => panic!("expected growing tree batch, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn running_status_progress_includes_elapsed_time() {
         let budget = WorkerBudget::for_profile_with_parallelism(
             ScanResourceProfile::Balanced,
@@ -3652,6 +3738,23 @@ mod tests {
 
         assert_eq!(value["progress"]["scannedItems"], "10");
         assert!(value["progress"]["elapsedMs"].as_str().is_some());
+    }
+
+    #[test]
+    fn running_status_progress_can_come_from_growing_tree_batch() {
+        let budget = WorkerBudget::for_profile_with_parallelism(
+            ScanResourceProfile::Balanced,
+            std::num::NonZeroUsize::new(4).expect("cores"),
+        );
+        let registry = SessionRegistry::new(budget, 8, 1);
+        let session_id = ScanSessionId::new(1).expect("session id");
+        registry.insert_running(session_id, CancellationToken::new());
+        registry.push_event(session_id, growing_tree_batch_event(session_id, 25));
+
+        let status = registry.status(session_id).expect("running status");
+        let value = serde_json::to_value(status).expect("status json");
+
+        assert_eq!(value["progress"]["scannedItems"], "25");
     }
 
     #[tokio::test]

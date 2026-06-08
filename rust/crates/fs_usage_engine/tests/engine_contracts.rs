@@ -52,6 +52,16 @@ fn fake_scan_creates_snapshot() {
             ..
         }
     )));
+    let growing_batch = events
+        .events()
+        .iter()
+        .find_map(|event| match event {
+            ScanEvent::GrowingTreeBatch { batch } => Some(batch),
+            _ => None,
+        })
+        .expect("growing tree batch");
+    assert_eq!(growing_batch.scanned_items(), 3);
+    assert_eq!(growing_batch.events().len(), 6);
     assert!(
         events
             .events()

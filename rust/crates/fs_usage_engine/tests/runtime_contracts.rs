@@ -1,13 +1,47 @@
-use fs_usage_core::{ScanSessionId, SnapshotId};
+use fs_usage_core::{
+    ChildCompleteness, EvidenceConfidence, MeasuredQuantity, NodeKind, PartialNodeId,
+    ScanSessionId, SizeBytes, SizeFact, SnapshotId,
+};
 use fs_usage_engine::{
-    BoundedEventBuffer, CpuPriorityHint, EventSink, IoPriorityHint, PanicPolicy,
-    RuntimeAdmissionController, RuntimeAdmissionError, RuntimeLane, ScanEvent, ScanResourceProfile,
-    WorkerBudget,
+    BoundedEventBuffer, CpuPriorityHint, EventSink, GrowingTreeBatch, GrowingTreeEvent,
+    IoPriorityHint, PanicPolicy, PartialNodeName, RuntimeAdmissionController,
+    RuntimeAdmissionError, RuntimeLane, ScanEvent, ScanResourceProfile, WorkerBudget,
 };
 use std::num::NonZeroUsize;
 
 fn cores(value: usize) -> NonZeroUsize {
     NonZeroUsize::new(value).expect("test core count")
+}
+
+fn growing_batch(session_id: ScanSessionId, scanned_items: u64) -> ScanEvent {
+    let node_id = PartialNodeId::new(1).expect("partial node id");
+    let size = SizeFact::new(
+        scanned_items,
+        MeasuredQuantity::ApparentBytes,
+        Some(SizeBytes::new(scanned_items)),
+        EvidenceConfidence::Low,
+    );
+    let batch = GrowingTreeBatch::new(
+        session_id,
+        scanned_items,
+        vec![
+            GrowingTreeEvent::NodeDiscovered {
+                session_id,
+                node_id,
+                parent_id: None,
+                name: PartialNodeName::new("root").expect("name"),
+                kind: NodeKind::Directory,
+            },
+            GrowingTreeEvent::NodeCompleted {
+                session_id,
+                node_id,
+                aggregate_size: size,
+                child_completeness: ChildCompleteness::Complete,
+            },
+        ],
+    )
+    .expect("growing batch");
+    ScanEvent::GrowingTreeBatch { batch }
 }
 
 #[test]
@@ -89,4 +123,30 @@ fn bounded_event_buffer_coalesces_progress_and_keeps_terminal_events() {
     ));
     assert_eq!(buffer.coalesced_progress_count(), 1);
     assert_eq!(buffer.evicted_event_count(), 1);
+}
+
+#[test]
+fn bounded_event_buffer_coalesces_growing_batches_as_progress_hints() {
+    let session_id = ScanSessionId::new(43).expect("session id");
+    let mut buffer = BoundedEventBuffer::new(cores(3));
+
+    buffer.emit(ScanEvent::Started { session_id });
+    buffer.emit(ScanEvent::Progress {
+        session_id,
+        scanned_items: 10,
+    });
+    buffer.emit(growing_batch(session_id, 20));
+    buffer.emit(growing_batch(session_id, 30));
+
+    assert_eq!(buffer.events().len(), 3);
+    assert!(matches!(buffer.events()[0], ScanEvent::Started { .. }));
+    assert!(matches!(buffer.events()[1], ScanEvent::Progress { .. }));
+    match &buffer.events()[2] {
+        ScanEvent::GrowingTreeBatch { batch } => {
+            assert_eq!(batch.scanned_items(), 30);
+        }
+        other => panic!("expected growing tree batch, got {other:?}"),
+    }
+    assert_eq!(buffer.coalesced_progress_count(), 1);
+    assert_eq!(buffer.evicted_event_count(), 0);
 }

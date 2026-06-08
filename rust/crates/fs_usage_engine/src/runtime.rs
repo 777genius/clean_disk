@@ -286,11 +286,7 @@ impl BoundedEventBuffer {
 
     fn push_lifecycle(&mut self, event: ScanEvent) {
         if self.events.len() >= self.max_items {
-            if let Some(position) = self
-                .events
-                .iter()
-                .position(|event| matches!(event, ScanEvent::Progress { .. }))
-            {
+            if let Some(position) = self.events.iter().position(is_replayable_progress_hint) {
                 self.events.remove(position);
             } else {
                 self.events.remove(0);
@@ -318,15 +314,51 @@ impl BoundedEventBuffer {
 
         self.events.push(event);
     }
+
+    fn push_growing_tree_batch(&mut self, event: ScanEvent) {
+        if let Some(position) = self
+            .events
+            .iter()
+            .rposition(|event| matches!(event, ScanEvent::GrowingTreeBatch { .. }))
+        {
+            self.events[position] = event;
+            self.coalesced_progress_count += 1;
+            return;
+        }
+
+        if self.events.len() >= self.max_items {
+            if let Some(position) = self
+                .events
+                .iter()
+                .position(|event| matches!(event, ScanEvent::Progress { .. }))
+            {
+                self.events.remove(position);
+                self.evicted_event_count += 1;
+            } else {
+                self.evicted_event_count += 1;
+                return;
+            }
+        }
+
+        self.events.push(event);
+    }
 }
 
 impl EventSink for BoundedEventBuffer {
     fn emit(&mut self, event: ScanEvent) {
         match event {
             ScanEvent::Progress { .. } => self.push_progress(event),
+            ScanEvent::GrowingTreeBatch { .. } => self.push_growing_tree_batch(event),
             _ => self.push_lifecycle(event),
         }
     }
+}
+
+fn is_replayable_progress_hint(event: &ScanEvent) -> bool {
+    matches!(
+        event,
+        ScanEvent::Progress { .. } | ScanEvent::GrowingTreeBatch { .. }
+    )
 }
 
 fn non_zero(value: usize) -> NonZeroUsize {

@@ -222,6 +222,8 @@ Stop implementation if any of these happen:
 - partial node IDs are accepted by cleanup commands;
 - UI treats partial sizes as final;
 - WebSocket sends unbounded per-file events;
+- reconnect replay stores every historical growing batch instead of the latest
+  bounded progress hint per session;
 - final snapshot publication depends on Flutter consuming partial events;
 - a backend reports growing tree support without contract tests for batch
   ordering, cancellation, and authority separation.
@@ -233,8 +235,20 @@ Stop implementation if any of these happen:
 3. Add fake scanner support for deterministic tests.
 4. Add Flutter domain/store handling for partial row batches.
 5. Add TreeTable visual state for partial/scanning/complete rows.
-6. Add pdu fork/upstream spike or custom scanner adapter for real events.
-7. Run large-tree UI and backpressure benchmarks.
+6. Coalesce replay/runtime buffers so growing batches behave as bounded
+   progress hints, not unbounded history.
+7. Add pdu fork/upstream spike or custom scanner adapter for real events.
+8. Run large-tree UI and backpressure benchmarks.
 
-The current repository has slice 1 started: `PartialNodeId`,
-`growing_tree_streaming`, `GrowingTreeEvent`, and `GrowingTreeBatch`.
+Current repository state:
+
+- `PartialNodeId`, `growing_tree_streaming`, `GrowingTreeEvent`, and
+  `GrowingTreeBatch` exist in Rust core/engine contracts.
+- The daemon protocol maps `growing_tree_batch` WebSocket events.
+- Flutter maps growing batches into partial, non-authoritative rows.
+- The scan table can render running partial rows but disables selection,
+  context menu, and cleanup authority for them.
+- Rust and Flutter fake adapters can publish deterministic growing batches.
+- `parallel-disk-usage` remains a final-tree adapter and reports growing tree
+  streaming as unsupported until a real pdu fork/upstream/custom streaming
+  scanner adapter exists.

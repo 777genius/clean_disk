@@ -1,5 +1,6 @@
 use crate::{
     events::ScanEvent,
+    growing_tree::{GrowingNodeState, GrowingTreeBatch, GrowingTreeEvent, PartialNodeName},
     ports::{EventSink, ScannerBackend},
     read_model::{DraftNode, ScanSnapshotDraft},
     scan::{
@@ -8,8 +9,8 @@ use crate::{
     },
 };
 use fs_usage_core::{
-    CapabilitySet, ChildCompleteness, EvidenceConfidence, MeasuredQuantity, NodeKind, ScanIssue,
-    SizeBytes, SizeFact, SupportLevel,
+    CapabilitySet, ChildCompleteness, EvidenceConfidence, MeasuredQuantity, NodeKind,
+    PartialNodeId, ScanIssue, ScanSessionId, SizeBytes, SizeFact, SupportLevel,
 };
 
 #[derive(Debug, Clone)]
@@ -112,6 +113,7 @@ impl ScannerBackend for FakeScannerBackend {
             session_id: request.session_id(),
             scanned_items: 3,
         });
+        emit_sample_growing_tree_batch(request.session_id(), events);
 
         Ok(BackendScanOutput::new(
             BackendRunId::new(1).expect("non-zero backend run id"),
@@ -120,4 +122,66 @@ impl ScannerBackend for FakeScannerBackend {
             self.capabilities.clone(),
         ))
     }
+}
+
+fn emit_sample_growing_tree_batch(session_id: ScanSessionId, events: &mut dyn EventSink) {
+    let root = PartialNodeId::new(1).expect("partial root id");
+    let alpha = PartialNodeId::new(2).expect("partial alpha id");
+    let beta = PartialNodeId::new(3).expect("partial beta id");
+    let size = |bytes| {
+        SizeFact::new(
+            bytes,
+            MeasuredQuantity::ApparentBytes,
+            Some(SizeBytes::new(bytes)),
+            EvidenceConfidence::Low,
+        )
+    };
+    let batch = GrowingTreeBatch::new(
+        session_id,
+        3,
+        vec![
+            GrowingTreeEvent::NodeDiscovered {
+                session_id,
+                node_id: root,
+                parent_id: None,
+                name: PartialNodeName::new("root").expect("root name"),
+                kind: NodeKind::Directory,
+            },
+            GrowingTreeEvent::NodeSizeUpdated {
+                session_id,
+                node_id: root,
+                aggregate_size: size(100),
+                state: GrowingNodeState::Scanning,
+            },
+            GrowingTreeEvent::NodeDiscovered {
+                session_id,
+                node_id: alpha,
+                parent_id: Some(root),
+                name: PartialNodeName::new("alpha.log").expect("alpha name"),
+                kind: NodeKind::File,
+            },
+            GrowingTreeEvent::NodeCompleted {
+                session_id,
+                node_id: alpha,
+                aggregate_size: size(40),
+                child_completeness: ChildCompleteness::Complete,
+            },
+            GrowingTreeEvent::NodeDiscovered {
+                session_id,
+                node_id: beta,
+                parent_id: Some(root),
+                name: PartialNodeName::new("beta.cache").expect("beta name"),
+                kind: NodeKind::File,
+            },
+            GrowingTreeEvent::NodeCompleted {
+                session_id,
+                node_id: beta,
+                aggregate_size: size(60),
+                child_completeness: ChildCompleteness::Complete,
+            },
+        ],
+    )
+    .expect("valid growing tree batch");
+
+    events.emit(ScanEvent::GrowingTreeBatch { batch });
 }
