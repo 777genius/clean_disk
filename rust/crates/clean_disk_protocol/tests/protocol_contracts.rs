@@ -1,10 +1,11 @@
 use clean_disk_protocol::{
-    BoundaryPolicyDto, ChildCompletenessDto, DaemonDiagnosticsDto, DecimalU64Dto, DecimalU128Dto,
-    DecimalUsizeDto, HardlinkPolicyDto, MeasuredQuantityDto, MeasuredQuantityResponseDto,
-    NodeFlagsDto, NodeKindDto, NodePageItemDto, PROTOCOL_VERSION, PathPrivacyDto, RawPathDto,
-    ScanEventDto, ScanModeDto, ScanProgressDto, ScanSessionStatusDto, ScanTargetDto,
-    SearchPageRequestDto, SearchTextDto, SensitiveTextError, SessionStateDto, SizeConfidenceDto,
-    SizeFactDto, StartScanRequestDto, TargetScopeDto, protocol_schema,
+    BoundaryPolicyDto, CapabilitySetDto, ChildCompletenessDto, DaemonDiagnosticsDto, DecimalU64Dto,
+    DecimalU128Dto, DecimalUsizeDto, HardlinkPolicyDto, MeasuredQuantityDto,
+    MeasuredQuantityResponseDto, NodeFlagsDto, NodeKindDto, NodePageItemDto, PROTOCOL_VERSION,
+    PathPrivacyDto, RawPathDto, ScanEventDto, ScanModeDto, ScanProgressDto, ScanSessionStatusDto,
+    ScanTargetDto, SearchPageRequestDto, SearchTextDto, SensitiveTextError, SessionStateDto,
+    SizeConfidenceDto, SizeFactDto, StartScanRequestDto, SupportLevelDto, TargetScopeDto,
+    protocol_schema,
 };
 use serde_json::{Value, json};
 
@@ -75,6 +76,22 @@ fn command_unknown_values_fail_closed() {
     });
 
     assert!(serde_json::from_value::<StartScanRequestDto>(request).is_err());
+}
+
+#[test]
+fn missing_growing_tree_capability_defaults_to_unknown() {
+    let capabilities = serde_json::from_value::<CapabilitySetDto>(json!({
+        "hardlinks": "unsupported",
+        "filesystemBoundary": "supported",
+        "cooperativeCancellation": "unsupported",
+        "metadataEnrichment": "unsupported"
+    }))
+    .expect("capabilities");
+
+    assert_eq!(
+        capabilities.growing_tree_streaming(),
+        SupportLevelDto::Unknown
+    );
 }
 
 #[test]

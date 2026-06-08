@@ -11,6 +11,7 @@ pub struct CapabilitySet {
     filesystem_boundary: SupportLevel,
     cooperative_cancellation: SupportLevel,
     metadata_enrichment: SupportLevel,
+    growing_tree_streaming: SupportLevel,
 }
 
 impl CapabilitySet {
@@ -19,17 +20,20 @@ impl CapabilitySet {
         filesystem_boundary: SupportLevel,
         cooperative_cancellation: SupportLevel,
         metadata_enrichment: SupportLevel,
+        growing_tree_streaming: SupportLevel,
     ) -> Self {
         Self {
             hardlinks,
             filesystem_boundary,
             cooperative_cancellation,
             metadata_enrichment,
+            growing_tree_streaming,
         }
     }
 
     pub const fn unknown() -> Self {
         Self::new(
+            SupportLevel::Unknown,
             SupportLevel::Unknown,
             SupportLevel::Unknown,
             SupportLevel::Unknown,
@@ -51,5 +55,9 @@ impl CapabilitySet {
 
     pub const fn metadata_enrichment(self) -> SupportLevel {
         self.metadata_enrichment
+    }
+
+    pub const fn growing_tree_streaming(self) -> SupportLevel {
+        self.growing_tree_streaming
     }
 }

@@ -81,6 +81,7 @@ void main() {
           'filesystemBoundary': 'supported',
           'cooperativeCancellation': 'unsupported',
           'metadataEnrichment': 'unsupported',
+          'growingTreeStreaming': 'unsupported',
         },
       },
       'limits': {'maxPageSize': '500', 'maxEventQueueItems': '1024'},
@@ -135,6 +136,21 @@ void main() {
       domain.runtimeProof.packaging.updateSafety.quiesceRequiredBeforeUpdate,
       isTrue,
     );
+    expect(
+      domain.scanner.capabilities.growingTreeStreaming,
+      SupportLevel.unsupported,
+    );
+  });
+
+  test('missing growing tree capability fails closed to unknown', () {
+    final dto = CapabilitySetDto.fromJson({
+      'hardlinks': 'unsupported',
+      'filesystemBoundary': 'supported',
+      'cooperativeCancellation': 'unsupported',
+      'metadataEnrichment': 'unsupported',
+    });
+
+    expect(dto.toDomain().growingTreeStreaming, SupportLevel.unknown);
   });
 
   test(

@@ -8,7 +8,7 @@ pub mod size;
 pub mod target;
 
 pub use capability::{CapabilitySet, SupportLevel};
-pub use ids::{NodeId, NodeRef, OperationId, ScanSessionId, SnapshotId};
+pub use ids::{NodeId, NodeRef, OperationId, PartialNodeId, ScanSessionId, SnapshotId};
 pub use issue::{IssueCode, IssueEvidence, IssueSeverity, ScanIssue};
 pub use node::{ChildCompleteness, NodeFlags, NodeIdentityEvidence, NodeKind};
 pub use size::{EvidenceConfidence, MeasuredQuantity, ReclaimEstimate, SizeBytes, SizeFact};

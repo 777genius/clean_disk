@@ -896,12 +896,14 @@ final class CapabilitySet {
     required this.filesystemBoundary,
     required this.cooperativeCancellation,
     required this.metadataEnrichment,
+    required this.growingTreeStreaming,
   });
 
   final SupportLevel hardlinks;
   final SupportLevel filesystemBoundary;
   final SupportLevel cooperativeCancellation;
   final SupportLevel metadataEnrichment;
+  final SupportLevel growingTreeStreaming;
 }
 
 final class ScannerCapability {

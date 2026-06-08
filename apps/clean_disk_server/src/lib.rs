@@ -2867,6 +2867,7 @@ fn map_capabilities(capabilities: ScannerBackendCapabilities) -> CapabilitySetDt
         map_support(capabilities.filesystem_boundary()),
         map_support(capabilities.cooperative_cancellation()),
         map_support(capabilities.metadata_enrichment()),
+        map_support(capabilities.growing_tree_streaming()),
     )
 }
 

@@ -104,6 +104,8 @@ pub struct CapabilitySetDto {
     filesystem_boundary: SupportLevelDto,
     cooperative_cancellation: SupportLevelDto,
     metadata_enrichment: SupportLevelDto,
+    #[serde(default = "unknown_support_level")]
+    growing_tree_streaming: SupportLevelDto,
 }
 
 impl CapabilitySetDto {
@@ -112,18 +114,40 @@ impl CapabilitySetDto {
         filesystem_boundary: SupportLevelDto,
         cooperative_cancellation: SupportLevelDto,
         metadata_enrichment: SupportLevelDto,
+        growing_tree_streaming: SupportLevelDto,
     ) -> Self {
         Self {
             hardlinks,
             filesystem_boundary,
             cooperative_cancellation,
             metadata_enrichment,
+            growing_tree_streaming,
         }
     }
 
     pub const fn hardlinks(&self) -> SupportLevelDto {
         self.hardlinks
     }
+
+    pub const fn filesystem_boundary(&self) -> SupportLevelDto {
+        self.filesystem_boundary
+    }
+
+    pub const fn cooperative_cancellation(&self) -> SupportLevelDto {
+        self.cooperative_cancellation
+    }
+
+    pub const fn metadata_enrichment(&self) -> SupportLevelDto {
+        self.metadata_enrichment
+    }
+
+    pub const fn growing_tree_streaming(&self) -> SupportLevelDto {
+        self.growing_tree_streaming
+    }
+}
+
+const fn unknown_support_level() -> SupportLevelDto {
+    SupportLevelDto::Unknown
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

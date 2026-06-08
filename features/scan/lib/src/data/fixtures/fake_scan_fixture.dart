@@ -57,6 +57,7 @@ const _defaultCapabilities = DaemonCapabilities(
       filesystemBoundary: SupportLevel.supported,
       cooperativeCancellation: SupportLevel.supported,
       metadataEnrichment: SupportLevel.supported,
+      growingTreeStreaming: SupportLevel.supported,
     ),
   ),
   limits: ProtocolLimits(maxPageSize: 500, maxEventQueueItems: 1024),

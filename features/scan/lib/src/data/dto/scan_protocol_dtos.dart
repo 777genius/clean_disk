@@ -677,12 +677,14 @@ final class CapabilitySetDto {
     required this.filesystemBoundary,
     required this.cooperativeCancellation,
     required this.metadataEnrichment,
+    required this.growingTreeStreaming,
   });
 
   final String hardlinks;
   final String filesystemBoundary;
   final String cooperativeCancellation;
   final String metadataEnrichment;
+  final String growingTreeStreaming;
 
   factory CapabilitySetDto.fromJson(Map<String, Object?> json) {
     return CapabilitySetDto(
@@ -690,6 +692,8 @@ final class CapabilitySetDto {
       filesystemBoundary: _stringField(json, 'filesystemBoundary'),
       cooperativeCancellation: _stringField(json, 'cooperativeCancellation'),
       metadataEnrichment: _stringField(json, 'metadataEnrichment'),
+      growingTreeStreaming:
+          _optionalStringField(json, 'growingTreeStreaming') ?? 'unknown',
     );
   }
 }

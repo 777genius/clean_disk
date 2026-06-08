@@ -1,14 +1,16 @@
 use fs_usage_core::{
-    BoundaryPolicy, EvidenceConfidence, HardlinkPolicy, MeasuredQuantity, NodeId, ReclaimEstimate,
-    ScanSessionId, ScanTarget, SizeBytes, SizeFact, TargetPath, TargetScope,
+    BoundaryPolicy, EvidenceConfidence, HardlinkPolicy, MeasuredQuantity, NodeId, PartialNodeId,
+    ReclaimEstimate, ScanSessionId, ScanTarget, SizeBytes, SizeFact, TargetPath, TargetScope,
 };
 
 #[test]
 fn ids_reject_zero_values() {
     assert!(ScanSessionId::new(0).is_none());
     assert!(NodeId::new(0).is_none());
+    assert!(PartialNodeId::new(0).is_none());
     assert_eq!(ScanSessionId::new(7).expect("id").get(), 7);
     assert_eq!(NodeId::new(3).expect("node").get(), 3);
+    assert_eq!(PartialNodeId::new(5).expect("partial node").get(), 5);
 }
 
 #[test]

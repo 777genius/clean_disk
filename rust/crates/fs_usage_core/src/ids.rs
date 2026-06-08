@@ -52,6 +52,19 @@ impl NodeId {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct PartialNodeId(NonZeroU64);
+
+impl PartialNodeId {
+    pub fn new(value: u64) -> Option<Self> {
+        NonZeroU64::new(value).map(Self)
+    }
+
+    pub const fn get(self) -> u64 {
+        self.0.get()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeRef {
     snapshot_id: SnapshotId,

@@ -1668,6 +1668,7 @@ DaemonCapabilities _capabilities({
         filesystemBoundary: SupportLevel.supported,
         cooperativeCancellation: SupportLevel.supported,
         metadataEnrichment: SupportLevel.supported,
+        growingTreeStreaming: SupportLevel.supported,
       ),
     ),
     limits: const ProtocolLimits(maxPageSize: 100, maxEventQueueItems: 100),

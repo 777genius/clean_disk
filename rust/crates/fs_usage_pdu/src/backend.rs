@@ -279,6 +279,7 @@ fn pdu_capabilities() -> ScannerBackendCapabilities {
             SupportLevel::Supported,
             SupportLevel::Unsupported,
             SupportLevel::Unsupported,
+            SupportLevel::Unsupported,
         ),
     )
 }

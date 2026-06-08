@@ -348,6 +348,7 @@ extension CapabilitySetDtoMapper on CapabilitySetDto {
       filesystemBoundary: filesystemBoundary.toSupportLevel(),
       cooperativeCancellation: cooperativeCancellation.toSupportLevel(),
       metadataEnrichment: metadataEnrichment.toSupportLevel(),
+      growingTreeStreaming: growingTreeStreaming.toSupportLevel(),
     );
   }
 }
