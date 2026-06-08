@@ -26,7 +26,9 @@ pub use cleanup::{
     ExecuteCleanupPlanRequestDto, RestoreExpectationLevelDto,
 };
 pub use diagnostics::DaemonDiagnosticsDto;
-pub use event::{EventSequenceDto, ScanEventDto, ScanEventEnvelopeDto};
+pub use event::{
+    EventSequenceDto, GrowingNodeStateDto, GrowingTreeEventDto, ScanEventDto, ScanEventEnvelopeDto,
+};
 pub use issue::{IssueCodeDto, IssueEvidenceDto, IssueSeverityDto, ScanIssueDto};
 pub use node::{
     ChildCompletenessDto, ChildSortDto, ChildrenPageRequestDto, MeasuredQuantityResponseDto,

@@ -629,6 +629,81 @@ void main() {
   });
 
   test(
+    'applies growing tree batches as partial non-authoritative rows',
+    () async {
+      final repository = _FakeScanRepository();
+      final eventClient = _FakeScanEventClient();
+      final store = _store(repository, eventClient);
+
+      await store.start(_startCommand());
+
+      store.reconcileEvent(
+        ScanEventEnvelope(
+          protocolVersion: ProtocolVersion.current,
+          sequence: EventSequence('10'),
+          emittedAtUnixMs: BigInt.from(10),
+          event: ScanGrowingTreeBatch(
+            sessionId: ScanSessionId('1'),
+            scannedItems: BigInt.from(3),
+            events: [
+              GrowingNodeDiscovered(
+                nodeId: PartialNodeId('1'),
+                parentId: null,
+                name: 'Macintosh HD',
+                kind: NodeKind.directory,
+              ),
+              GrowingNodeDiscovered(
+                nodeId: PartialNodeId('2'),
+                parentId: PartialNodeId('1'),
+                name: 'Users',
+                kind: NodeKind.directory,
+              ),
+              GrowingNodeSizeUpdated(
+                nodeId: PartialNodeId('2'),
+                aggregateSize: SizeFact(
+                  rawValue: '128',
+                  quantity: MeasuredQuantity.apparentBytes,
+                  byteEquivalent: '128',
+                  confidence: SizeConfidence.low,
+                ),
+                state: GrowingNodeState.scanning,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(store.progress?.scannedItems, BigInt.from(3));
+      expect(store.hasPartialScanTree, isTrue);
+      expect(store.partialVisibleTreeRows.map((row) => row.item.name), [
+        'Macintosh HD',
+        'Users',
+      ]);
+      expect(store.partialVisibleTreeRows.last.depth, 1);
+      expect(
+        store.partialVisibleRows.last.aggregateSize.rawBigInt,
+        BigInt.from(128),
+      );
+      expect(store.visibleRows, isEmpty);
+
+      store.reconcileEvent(
+        ScanEventEnvelope(
+          protocolVersion: ProtocolVersion.current,
+          sequence: EventSequence('11'),
+          emittedAtUnixMs: BigInt.from(11),
+          event: ScanSnapshotPublished(
+            sessionId: ScanSessionId('1'),
+            snapshotId: SnapshotId('2'),
+          ),
+        ),
+      );
+
+      expect(store.hasPartialScanTree, isFalse);
+      expect(store.partialVisibleRows, isEmpty);
+    },
+  );
+
+  test(
     'disposes previous daemon session before starting replacement scan',
     () async {
       final repository = _FakeScanRepository();

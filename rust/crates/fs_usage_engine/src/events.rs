@@ -1,4 +1,4 @@
-use crate::ports::EventSink;
+use crate::{growing_tree::GrowingTreeBatch, ports::EventSink};
 use fs_usage_core::{ScanSessionId, SnapshotId};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -9,6 +9,9 @@ pub enum ScanEvent {
     Progress {
         session_id: ScanSessionId,
         scanned_items: u64,
+    },
+    GrowingTreeBatch {
+        batch: GrowingTreeBatch,
     },
     SnapshotPublished {
         session_id: ScanSessionId,

@@ -2033,7 +2033,7 @@ class _NodeTable extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.cleanDiskL10n;
     final rows = store.visibleRows;
-    final tableRows = store.viewport.mode == ScanQueryMode.children
+    final finalTreeRows = store.viewport.mode == ScanQueryMode.children
         ? store.visibleTreeRows
         : rows
               .map(
@@ -2045,6 +2045,21 @@ class _NodeTable extends StatelessWidget {
                 ),
               )
               .toList(growable: false);
+    final showPartialRows =
+        store.sessionStatus?.state == SessionState.running &&
+        store.hasPartialScanTree;
+    final tableRows = showPartialRows
+        ? _partialTreeRows(store.partialVisibleTreeRows)
+        : _treeRows(
+            finalTreeRows,
+            l10n: l10n,
+            selectedNodeId: store.selectedNodeId,
+            isQueued: store.isQueued,
+            isMovedToTrash: store.isMovedToTrash,
+            stale: store.viewport.isStale,
+            disabled: false,
+            allowExpansion: store.viewport.mode == ScanQueryMode.children,
+          );
     final state = rows.isEmpty
         ? null
         : _tableState(l10n: l10n, store: store, issueCount: _issueCount(rows));
@@ -2064,9 +2079,11 @@ class _NodeTable extends StatelessWidget {
           context: context,
           l10n: l10n,
           tableRows: tableRows,
+          contextMenuRows: finalTreeRows,
+          allowRowActions: !showPartialRows,
           queryBanner: queryBanner,
         ),
-        if (store.canLoadMoreVisibleTreeRows) ...[
+        if (!showPartialRows && store.canLoadMoreVisibleTreeRows) ...[
           const SizedBox(height: 8),
           _TreeLoadMoreButton(
             loading: store.isLoadingMoreVisibleTreeRows,
@@ -2082,7 +2099,9 @@ class _NodeTable extends StatelessWidget {
   Widget _nodeTableBody({
     required BuildContext context,
     required CleanDiskLocalizations l10n,
-    required List<ScanTreeNodeRow> tableRows,
+    required List<AppTreeTableRow> tableRows,
+    required List<ScanTreeNodeRow> contextMenuRows,
+    required bool allowRowActions,
     required _RowsStateContent? queryBanner,
   }) {
     final table = AppTreeTable(
@@ -2092,16 +2111,7 @@ class _NodeTable extends StatelessWidget {
         percent: l10n.percentColumn,
         items: l10n.itemsColumn,
       ),
-      rows: _treeRows(
-        tableRows,
-        l10n: l10n,
-        selectedNodeId: store.selectedNodeId,
-        isQueued: store.isQueued,
-        isMovedToTrash: store.isMovedToTrash,
-        stale: store.viewport.isStale,
-        disabled: false,
-        allowExpansion: store.viewport.mode == ScanQueryMode.children,
-      ),
+      rows: tableRows,
       showHeader: tableRows.isNotEmpty || queryBanner != null,
       emptyState: _EmptyRowsState(
         store: store,
@@ -2125,13 +2135,19 @@ class _NodeTable extends StatelessWidget {
         itemsFlex: 1,
       ),
       rowsScrollable: rowsScrollable,
-      onRowTap: (row) => unawaited(_selectAndMaybeToggle(row)),
-      onRowToggleExpansion: (row) => unawaited(
-        store.toggleTreeNode(NodeId(row.id)).whenComplete(onStoreChanged),
-      ),
-      onRowContextMenu: store.viewport.mode == ScanQueryMode.children
+      onRowTap: allowRowActions
+          ? (row) => unawaited(_selectAndMaybeToggle(row))
+          : null,
+      onRowToggleExpansion:
+          allowRowActions && store.viewport.mode == ScanQueryMode.children
+          ? (row) => unawaited(
+              store.toggleTreeNode(NodeId(row.id)).whenComplete(onStoreChanged),
+            )
+          : null,
+      onRowContextMenu:
+          allowRowActions && store.viewport.mode == ScanQueryMode.children
           ? (row, position) => unawaited(
-              _showRowContextMenu(context, row, position, tableRows),
+              _showRowContextMenu(context, row, position, contextMenuRows),
             )
           : null,
     );
@@ -6028,6 +6044,42 @@ List<AppTreeTableRow> _treeRows(
       warning: item.issueCount > 0 || item.subtreeIssueCount > 0,
       stale: stale,
       disabled: disabled,
+      icon: item.kind == NodeKind.file
+          ? Icons.insert_drive_file_outlined
+          : Icons.folder_outlined,
+    );
+  }).toList();
+}
+
+List<AppTreeTableRow> _partialTreeRows(List<PartialScanTreeNodeRow> rows) {
+  final maxSize = rows.fold<BigInt>(
+    BigInt.zero,
+    (current, row) => row.item.aggregateSize.rawBigInt > current
+        ? row.item.aggregateSize.rawBigInt
+        : current,
+  );
+
+  return rows.map((row) {
+    final item = row.item;
+    final percent = maxSize == BigInt.zero
+        ? 0.0
+        : item.aggregateSize.rawBigInt.toDouble() / maxSize.toDouble();
+    return AppTreeTableRow(
+      id: 'partial:${item.nodeId.value}',
+      name: item.name,
+      sizeText: _formatSize(item.aggregateSize),
+      percentText: '${(percent * 100).clamp(0, 100).toStringAsFixed(1)}%',
+      itemsText: '',
+      progress: percent,
+      depth: row.depth,
+      selected: false,
+      hasChildren: false,
+      expanded: true,
+      loading: item.state == GrowingNodeState.scanning,
+      queued: false,
+      warning: item.issueCount > 0,
+      stale: false,
+      disabled: true,
       icon: item.kind == NodeKind.file
           ? Icons.insert_drive_file_outlined
           : Icons.folder_outlined,

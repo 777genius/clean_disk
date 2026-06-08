@@ -14,18 +14,18 @@ use clean_disk_protocol::{
     CleanupPlanStateDto, CleanupReceiptDto, CleanupReceiptItemDto, CleanupReceiptStateDto,
     CleanupRecoveryInboxDto, CreateCleanupPlanRequestDto, DaemonDiagnosticsDto, DecimalU64Dto,
     DecimalU128Dto, DecimalUsizeDto, DisplayPathDto, DisposeScanSessionRequestDto,
-    DistributionChannelDto, ExecuteCleanupPlanRequestDto, HardlinkPolicyDto, IssueCodeDto,
-    IssueEvidenceDto, IssueSeverityDto, MeasuredQuantityDto, MeasuredQuantityResponseDto,
-    NodeDetailsRequestDto, NodeDetailsResponseDto, NodeFlagsDto, NodeKindDto, NodePageItemDto,
-    NodePageResponseDto, NodeTimestampsDto, OpaqueCursorDto, PROTOCOL_VERSION, PackageModeDto,
-    PackagingProofDto, PackagingProofDtoParts, PathPrivacyDto, PermissionProbeDto,
-    PermissionProbeRequestDto, PermissionProbeStatusDto, PermissionRequiredActionDto,
-    ProtocolLimitDto, RawPathDto, RestoreExpectationLevelDto, RuntimePlatformDto, RuntimeProofDto,
-    ScanEventDto, ScanEventEnvelopeDto, ScanIssueDto, ScanProgressDto, ScanSessionStatusDto,
-    ScanTargetDto, ScannerCapabilityDto, ScannerIdentityProofDto, ScannerIdentityVerificationDto,
-    ScannerProcessKindDto, SearchPageRequestDto, SessionStateDto, SizeConfidenceDto, SizeFactDto,
-    StartScanRequestDto, SupportLevelDto, TargetScopeDto, TopItemsKindDto, TopItemsRequestDto,
-    UpdateSafetyDto,
+    DistributionChannelDto, ExecuteCleanupPlanRequestDto, GrowingNodeStateDto, GrowingTreeEventDto,
+    HardlinkPolicyDto, IssueCodeDto, IssueEvidenceDto, IssueSeverityDto, MeasuredQuantityDto,
+    MeasuredQuantityResponseDto, NodeDetailsRequestDto, NodeDetailsResponseDto, NodeFlagsDto,
+    NodeKindDto, NodePageItemDto, NodePageResponseDto, NodeTimestampsDto, OpaqueCursorDto,
+    PROTOCOL_VERSION, PackageModeDto, PackagingProofDto, PackagingProofDtoParts, PathPrivacyDto,
+    PermissionProbeDto, PermissionProbeRequestDto, PermissionProbeStatusDto,
+    PermissionRequiredActionDto, ProtocolLimitDto, RawPathDto, RestoreExpectationLevelDto,
+    RuntimePlatformDto, RuntimeProofDto, ScanEventDto, ScanEventEnvelopeDto, ScanIssueDto,
+    ScanProgressDto, ScanSessionStatusDto, ScanTargetDto, ScannerCapabilityDto,
+    ScannerIdentityProofDto, ScannerIdentityVerificationDto, ScannerProcessKindDto,
+    SearchPageRequestDto, SessionStateDto, SizeConfidenceDto, SizeFactDto, StartScanRequestDto,
+    SupportLevelDto, TargetScopeDto, TopItemsKindDto, TopItemsRequestDto, UpdateSafetyDto,
 };
 use fs_usage_core::{
     BoundaryPolicy, ChildCompleteness, EvidenceConfidence, HardlinkPolicy, IssueCode,
@@ -34,10 +34,10 @@ use fs_usage_core::{
 };
 use fs_usage_engine::{
     BackendScanRequest, BoundedEventBuffer, CancellationToken, ChildSort, ChildrenPageQuery,
-    EventSink, NodeDetails, NodeDetailsQuery, NodePageItem, Page, PageCursor, QueryFailure,
-    RuntimeAdmissionController, RuntimeAdmissionError, ScanEvent, ScanPermit, ScanResourceProfile,
-    ScanSession, ScanState, ScannerBackend, ScannerBackendCapabilities, SearchQuery, TopItemsKind,
-    TopItemsQuery, WorkerBudget,
+    EventSink, GrowingNodeState, GrowingTreeEvent, NodeDetails, NodeDetailsQuery, NodePageItem,
+    Page, PageCursor, QueryFailure, RuntimeAdmissionController, RuntimeAdmissionError, ScanEvent,
+    ScanPermit, ScanResourceProfile, ScanSession, ScanState, ScannerBackend,
+    ScannerBackendCapabilities, SearchQuery, TopItemsKind, TopItemsQuery, WorkerBudget,
 };
 use fs_usage_pdu::PduScannerBackend;
 use fs_usage_platform::{
@@ -3219,6 +3219,11 @@ fn map_event(event: ScanEvent) -> ScanEventDto {
             session_id: DecimalU128Dto::from_u128(session_id.get()),
             progress: ScanProgressDto::new(DecimalU64Dto::from_u64(scanned_items), None, None),
         },
+        ScanEvent::GrowingTreeBatch { batch } => ScanEventDto::GrowingTreeBatch {
+            session_id: DecimalU128Dto::from_u128(batch.session_id().get()),
+            scanned_items: DecimalU64Dto::from_u64(batch.scanned_items()),
+            events: batch.events().iter().map(map_growing_tree_event).collect(),
+        },
         ScanEvent::SnapshotPublished {
             session_id,
             snapshot_id,
@@ -3236,6 +3241,59 @@ fn map_event(event: ScanEvent) -> ScanEventDto {
             session_id: DecimalU128Dto::from_u128(session_id.get()),
             message,
         },
+    }
+}
+
+fn map_growing_tree_event(event: &GrowingTreeEvent) -> GrowingTreeEventDto {
+    match event {
+        GrowingTreeEvent::NodeDiscovered {
+            node_id,
+            parent_id,
+            name,
+            kind,
+            ..
+        } => GrowingTreeEventDto::NodeDiscovered {
+            node_id: DecimalU64Dto::from_u64(node_id.get()),
+            parent_id: parent_id.map(|id| DecimalU64Dto::from_u64(id.get())),
+            name: name.as_str().to_string(),
+            kind: map_node_kind(*kind),
+        },
+        GrowingTreeEvent::NodeSizeUpdated {
+            node_id,
+            aggregate_size,
+            state,
+            ..
+        } => GrowingTreeEventDto::NodeSizeUpdated {
+            node_id: DecimalU64Dto::from_u64(node_id.get()),
+            aggregate_size: map_size_fact(*aggregate_size),
+            state: map_growing_node_state(*state),
+        },
+        GrowingTreeEvent::NodeCompleted {
+            node_id,
+            aggregate_size,
+            child_completeness,
+            ..
+        } => GrowingTreeEventDto::NodeCompleted {
+            node_id: DecimalU64Dto::from_u64(node_id.get()),
+            aggregate_size: map_size_fact(*aggregate_size),
+            child_completeness: map_child_completeness(*child_completeness),
+        },
+        GrowingTreeEvent::NodeIssueRecorded { node_id, issue, .. } => {
+            GrowingTreeEventDto::NodeIssueRecorded {
+                node_id: node_id.map(|id| DecimalU64Dto::from_u64(id.get())),
+                issue: map_scan_issue(issue),
+            }
+        }
+    }
+}
+
+const fn map_growing_node_state(state: GrowingNodeState) -> GrowingNodeStateDto {
+    match state {
+        GrowingNodeState::Discovered => GrowingNodeStateDto::Discovered,
+        GrowingNodeState::Scanning => GrowingNodeStateDto::Scanning,
+        GrowingNodeState::Complete => GrowingNodeStateDto::Complete,
+        GrowingNodeState::Skipped => GrowingNodeStateDto::Skipped,
+        GrowingNodeState::Stale => GrowingNodeStateDto::Stale,
     }
 }
 

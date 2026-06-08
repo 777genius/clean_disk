@@ -193,6 +193,7 @@ final class FakeScanRepository implements ScanRepository {
     _status = completed;
 
     _emit(ScanStarted(sessionId: _currentSessionId));
+    _emitGrowingTreeBatch();
     _emit(ScanProgressed(sessionId: _currentSessionId, progress: progress));
     _emit(
       ScanSnapshotPublished(
@@ -556,6 +557,85 @@ final class FakeScanRepository implements ScanRepository {
         event: event,
       ),
     );
+  }
+
+  void _emitGrowingTreeBatch() {
+    final nodes = _subtreeNodesInDisplayOrder(_currentRootNodeId);
+    if (nodes.isEmpty) {
+      return;
+    }
+
+    final events = <GrowingTreeEvent>[];
+    for (final node in nodes) {
+      events.add(
+        GrowingNodeDiscovered(
+          nodeId: _partialId(node.id),
+          parentId: node.parentId == null ? null : _partialId(node.parentId!),
+          name: node.name,
+          kind: node.kind,
+        ),
+      );
+      final size = SizeFact(
+        rawValue: '${node.sizeBytes}',
+        quantity: MeasuredQuantity.apparentBytes,
+        byteEquivalent: '${node.sizeBytes}',
+        confidence: SizeConfidence.low,
+      );
+      events
+        ..add(
+          GrowingNodeSizeUpdated(
+            nodeId: _partialId(node.id),
+            aggregateSize: size,
+            state: GrowingNodeState.scanning,
+          ),
+        )
+        ..add(
+          GrowingNodeCompleted(
+            nodeId: _partialId(node.id),
+            aggregateSize: size,
+            childCompleteness: ChildCompleteness.complete,
+          ),
+        );
+      for (final issue in node.issues) {
+        events.add(
+          GrowingNodeIssueRecorded(nodeId: _partialId(node.id), issue: issue),
+        );
+      }
+    }
+
+    _emit(
+      ScanGrowingTreeBatch(
+        sessionId: _currentSessionId,
+        scannedItems: BigInt.from(nodes.length),
+        events: events,
+      ),
+    );
+  }
+
+  List<_FakeNode> _subtreeNodesInDisplayOrder(NodeId rootId) {
+    final result = <_FakeNode>[];
+    final visited = <NodeId>{};
+
+    void visit(NodeId id) {
+      if (!visited.add(id)) {
+        return;
+      }
+      final node = _nodes[id];
+      if (node == null) {
+        return;
+      }
+      result.add(node);
+      for (final childId in node.childIds) {
+        visit(childId);
+      }
+    }
+
+    visit(rootId);
+    return result;
+  }
+
+  PartialNodeId _partialId(NodeId id) {
+    return PartialNodeId(id.value);
   }
 
   void _sortNodes(List<_FakeNode> nodes, ChildSort sort) {

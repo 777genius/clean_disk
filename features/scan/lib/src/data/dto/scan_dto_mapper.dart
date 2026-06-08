@@ -295,6 +295,15 @@ extension ScanEventDtoMapper on ScanEventDto {
         sessionId: _requiredSessionId(),
         progress: _requiredProgress(),
       ),
+      'growing_tree_batch' => ScanGrowingTreeBatch(
+        sessionId: _requiredSessionId(),
+        scannedItems: BigInt.parse(
+          _requiredValue(scannedItems, 'scannedItems'),
+        ),
+        events: growingTreeEvents
+            .map((event) => event.toDomain())
+            .toList(growable: false),
+      ),
       'snapshot_published' => ScanSnapshotPublished(
         sessionId: _requiredSessionId(),
         snapshotId: SnapshotId(_requiredValue(snapshotId, 'snapshotId')),
@@ -316,6 +325,57 @@ extension ScanEventDtoMapper on ScanEventDto {
     final value = progress;
     if (value == null) {
       throw const FormatException('Missing progress');
+    }
+    return value.toDomain();
+  }
+}
+
+extension GrowingTreeEventDtoMapper on GrowingTreeEventDto {
+  GrowingTreeEvent toDomain() {
+    return switch (type) {
+      'node_discovered' => GrowingNodeDiscovered(
+        nodeId: _requiredPartialNodeId(),
+        parentId: parentId == null ? null : PartialNodeId(parentId!),
+        name: _requiredValue(name, 'name'),
+        kind: _requiredValue(kind, 'kind').toNodeKind(),
+      ),
+      'node_size_updated' => GrowingNodeSizeUpdated(
+        nodeId: _requiredPartialNodeId(),
+        aggregateSize: _requiredAggregateSize(),
+        state: _requiredValue(state, 'state').toGrowingNodeState(),
+      ),
+      'node_completed' => GrowingNodeCompleted(
+        nodeId: _requiredPartialNodeId(),
+        aggregateSize: _requiredAggregateSize(),
+        childCompleteness: _requiredValue(
+          childCompleteness,
+          'childCompleteness',
+        ).toChildCompleteness(),
+      ),
+      'node_issue_recorded' => GrowingNodeIssueRecorded(
+        nodeId: nodeId == null ? null : PartialNodeId(nodeId!),
+        issue: _requiredIssue(),
+      ),
+      _ => const UnknownGrowingTreeEvent(),
+    };
+  }
+
+  PartialNodeId _requiredPartialNodeId() {
+    return PartialNodeId(_requiredValue(nodeId, 'nodeId'));
+  }
+
+  SizeFact _requiredAggregateSize() {
+    final value = aggregateSize;
+    if (value == null) {
+      throw const FormatException('Missing aggregateSize');
+    }
+    return value.toDomain();
+  }
+
+  ScanIssue _requiredIssue() {
+    final value = issue;
+    if (value == null) {
+      throw const FormatException('Missing issue');
     }
     return value.toDomain();
   }
@@ -597,6 +657,17 @@ extension StringDomainMapper on String {
       'medium' => SizeConfidence.medium,
       'low' => SizeConfidence.low,
       _ => SizeConfidence.unknown,
+    };
+  }
+
+  GrowingNodeState toGrowingNodeState() {
+    return switch (this) {
+      'discovered' => GrowingNodeState.discovered,
+      'scanning' => GrowingNodeState.scanning,
+      'complete' => GrowingNodeState.complete,
+      'skipped' => GrowingNodeState.skipped,
+      'stale' => GrowingNodeState.stale,
+      _ => GrowingNodeState.unknown,
     };
   }
 

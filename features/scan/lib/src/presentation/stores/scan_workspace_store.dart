@@ -47,6 +47,13 @@ final class ScanTreeNodeRow {
   final bool loading;
 }
 
+final class PartialScanTreeNodeRow {
+  const PartialScanTreeNodeRow({required this.item, required this.depth});
+
+  final PartialNodeItem item;
+  final int depth;
+}
+
 final class ScanViewportState {
   const ScanViewportState({
     required this.parentId,
@@ -225,6 +232,13 @@ final class ScanWorkspaceStore with Store {
       ObservableMap<NodeId, _TreeChildrenPageState>();
   final ObservableMap<NodeId, bool> _expandedNodeIds =
       ObservableMap<NodeId, bool>();
+  final ObservableList<PartialNodeId> _partialRootNodeIds =
+      ObservableList<PartialNodeId>();
+  final ObservableMap<PartialNodeId, PartialNodeItem> _partialNodesById =
+      ObservableMap<PartialNodeId, PartialNodeItem>();
+  final ObservableMap<PartialNodeId, List<PartialNodeId>>
+  _partialChildrenByParent =
+      ObservableMap<PartialNodeId, List<PartialNodeId>>();
   final ObservableMap<NodeId, CleanupQueueIntent> _queuedItems =
       ObservableMap<NodeId, CleanupQueueIntent>();
   final ObservableMap<NodeId, CleanupReceiptItem> _movedToTrashItems =
@@ -356,6 +370,24 @@ final class ScanWorkspaceStore with Store {
       return List.unmodifiable(visibleTreeRows.map((row) => row.item));
     }
     return List.unmodifiable(_visibleRows);
+  }
+
+  bool get hasPartialScanTree => _partialNodesById.isNotEmpty;
+
+  List<PartialScanTreeNodeRow> get partialVisibleTreeRows {
+    if (_partialRootNodeIds.isEmpty) {
+      return const [];
+    }
+
+    final rows = <PartialScanTreeNodeRow>[];
+    for (final rootId in _partialRootNodeIds) {
+      _appendPartialVisibleTreeRows(rows: rows, nodeId: rootId, depth: 0);
+    }
+    return List.unmodifiable(rows);
+  }
+
+  List<PartialNodeItem> get partialVisibleRows {
+    return List.unmodifiable(partialVisibleTreeRows.map((row) => row.item));
   }
 
   List<NodePageItem> get diskUsageMapRows {
@@ -693,6 +725,7 @@ final class ScanWorkspaceStore with Store {
       _activeSnapshotId.value = null;
       _progress.value = null;
       _resetTreeProjection();
+      _resetPartialScanProjection();
       _resetDiskUsageMapProjection();
       _visibleRows.clear();
       _movedToTrashItems.clear();
@@ -1404,13 +1437,16 @@ final class ScanWorkspaceStore with Store {
       return;
     }
     if (_isTerminalSessionState(sessionStatus?.state) &&
-        (event is ScanStarted || event is ScanProgressed)) {
+        (event is ScanStarted ||
+            event is ScanProgressed ||
+            event is ScanGrowingTreeBatch)) {
       return;
     }
 
     runInAction(() {
       switch (event) {
         case ScanStarted():
+          _resetPartialScanProjection();
           _sessionStatus.value = ScanSessionStatus(
             sessionId: eventSessionId,
             state: SessionState.running,
@@ -1426,6 +1462,17 @@ final class ScanWorkspaceStore with Store {
             snapshotId: activeSnapshotId,
             rootNodeIds: sessionStatus?.rootNodeIds ?? const [],
             progress: progress,
+          );
+        case ScanGrowingTreeBatch(:final scannedItems, :final events):
+          _applyGrowingTreeBatch(events);
+          final nextProgress = _progressFromGrowingBatch(scannedItems);
+          _progress.value = nextProgress;
+          _sessionStatus.value = ScanSessionStatus(
+            sessionId: eventSessionId,
+            state: SessionState.running,
+            snapshotId: activeSnapshotId,
+            rootNodeIds: sessionStatus?.rootNodeIds ?? const [],
+            progress: nextProgress,
           );
         case ScanSnapshotPublished(:final snapshotId):
           final previousSnapshotId = activeSnapshotId;
@@ -1443,6 +1490,7 @@ final class ScanWorkspaceStore with Store {
             rootNodeIds: sessionStatus?.rootNodeIds ?? const [],
             progress: progress,
           );
+          _resetPartialScanProjection();
           if (shouldMarkStale || viewport.isStale) {
             _viewport.value = viewport.copyWith(isStale: shouldMarkStale);
           }
@@ -1454,6 +1502,7 @@ final class ScanWorkspaceStore with Store {
             rootNodeIds: sessionStatus?.rootNodeIds ?? const [],
             progress: progress,
           );
+          _resetPartialScanProjection();
         case ScanFailed(:final message):
           _sessionStatus.value = ScanSessionStatus(
             sessionId: eventSessionId,
@@ -1462,6 +1511,7 @@ final class ScanWorkspaceStore with Store {
             rootNodeIds: sessionStatus?.rootNodeIds ?? const [],
             progress: progress,
           );
+          _resetPartialScanProjection();
           _lastFailure.value = AppFailure.unexpected(message: message);
         case UnknownScanEvent():
           break;
@@ -1675,6 +1725,9 @@ final class ScanWorkspaceStore with Store {
     if (status.snapshotId != null) {
       _viewport.value = viewport.copyWith(isStale: false);
     }
+    if (status.isTerminal) {
+      _resetPartialScanProjection();
+    }
     _deletePlan.value = _buildDeletePlanSnapshot();
     _notifyChanged();
   }
@@ -1883,10 +1936,142 @@ final class ScanWorkspaceStore with Store {
     return state != null && state.nextCursor != null;
   }
 
+  ScanProgress _progressFromGrowingBatch(BigInt scannedItems) {
+    final currentProgress = progress;
+    if (currentProgress != null &&
+        currentProgress.scannedItems >= scannedItems) {
+      return currentProgress;
+    }
+    return ScanProgress(
+      scannedItems: scannedItems,
+      elapsedMs: currentProgress?.elapsedMs,
+      throughputBytesPerSec: currentProgress?.throughputBytesPerSec,
+    );
+  }
+
+  void _applyGrowingTreeBatch(List<GrowingTreeEvent> events) {
+    for (final event in events) {
+      switch (event) {
+        case GrowingNodeDiscovered():
+          _applyGrowingNodeDiscovered(event);
+        case GrowingNodeSizeUpdated():
+          _updatePartialNode(
+            event.nodeId,
+            aggregateSize: event.aggregateSize,
+            state: event.state,
+          );
+        case GrowingNodeCompleted():
+          _updatePartialNode(
+            event.nodeId,
+            aggregateSize: event.aggregateSize,
+            state: GrowingNodeState.complete,
+            childCompleteness: event.childCompleteness,
+          );
+        case GrowingNodeIssueRecorded():
+          _recordPartialNodeIssue(event.nodeId);
+        case UnknownGrowingTreeEvent():
+          break;
+      }
+    }
+  }
+
+  void _applyGrowingNodeDiscovered(GrowingNodeDiscovered event) {
+    final existing = _partialNodesById[event.nodeId];
+    _partialNodesById[event.nodeId] =
+        existing ??
+        PartialNodeItem(
+          nodeId: event.nodeId,
+          parentId: event.parentId,
+          name: event.name,
+          kind: event.kind,
+          aggregateSize: _zeroPartialSizeFact(),
+          state: GrowingNodeState.discovered,
+          childCompleteness: ChildCompleteness.unknown,
+          issueCount: 0,
+        );
+
+    final parentId = event.parentId;
+    if (parentId == null) {
+      if (!_partialRootNodeIds.contains(event.nodeId)) {
+        _partialRootNodeIds.add(event.nodeId);
+      }
+      return;
+    }
+
+    final children = _partialChildrenByParent[parentId] ?? const [];
+    if (!children.contains(event.nodeId)) {
+      _partialChildrenByParent[parentId] = [...children, event.nodeId];
+    }
+  }
+
+  void _updatePartialNode(
+    PartialNodeId nodeId, {
+    SizeFact? aggregateSize,
+    GrowingNodeState? state,
+    ChildCompleteness? childCompleteness,
+  }) {
+    final existing = _partialNodesById[nodeId];
+    if (existing == null) {
+      return;
+    }
+    _partialNodesById[nodeId] = existing.copyWith(
+      aggregateSize: aggregateSize,
+      state: state,
+      childCompleteness: childCompleteness,
+    );
+  }
+
+  void _recordPartialNodeIssue(PartialNodeId? nodeId) {
+    if (nodeId == null) {
+      return;
+    }
+    final existing = _partialNodesById[nodeId];
+    if (existing == null) {
+      return;
+    }
+    _partialNodesById[nodeId] = existing.copyWith(
+      issueCount: existing.issueCount + 1,
+    );
+  }
+
+  void _appendPartialVisibleTreeRows({
+    required List<PartialScanTreeNodeRow> rows,
+    required PartialNodeId nodeId,
+    required int depth,
+  }) {
+    final node = _partialNodesById[nodeId];
+    if (node == null) {
+      return;
+    }
+    rows.add(PartialScanTreeNodeRow(item: node, depth: depth));
+    for (final childId in _partialChildrenByParent[nodeId] ?? const []) {
+      _appendPartialVisibleTreeRows(
+        rows: rows,
+        nodeId: childId,
+        depth: depth + 1,
+      );
+    }
+  }
+
+  SizeFact _zeroPartialSizeFact() {
+    return SizeFact(
+      rawValue: '0',
+      quantity: MeasuredQuantity.apparentBytes,
+      byteEquivalent: '0',
+      confidence: SizeConfidence.low,
+    );
+  }
+
   void _resetTreeProjection() {
     _treeNodesById.clear();
     _treeChildrenByParent.clear();
     _expandedNodeIds.clear();
+  }
+
+  void _resetPartialScanProjection() {
+    _partialRootNodeIds.clear();
+    _partialNodesById.clear();
+    _partialChildrenByParent.clear();
   }
 
   void _resetDiskUsageMapProjection() {
@@ -1911,6 +2096,7 @@ final class ScanWorkspaceStore with Store {
     _lastRevealFailure.value = null;
     _visibleRows.clear();
     _resetTreeProjection();
+    _resetPartialScanProjection();
     _resetDiskUsageMapProjection();
     _queuedItems.clear();
     _movedToTrashItems.clear();

@@ -260,6 +260,53 @@ void main() {
     expect(event.snapshotId.value, '22');
   });
 
+  test('maps growing tree batch events into partial node domain events', () {
+    final dto = ScanEventEnvelopeDto.fromJson({
+      'protocolVersion': {'major': 0, 'minor': 5},
+      'sequence': '8',
+      'emittedAtUnixMs': '1710000000001',
+      'event': {
+        'type': 'growing_tree_batch',
+        'sessionId': '11',
+        'scannedItems': '42',
+        'events': [
+          {
+            'type': 'node_discovered',
+            'nodeId': '1',
+            'parentId': null,
+            'name': 'Macintosh HD',
+            'kind': 'directory',
+          },
+          {
+            'type': 'node_size_updated',
+            'nodeId': '1',
+            'aggregateSize': {
+              'rawValue': '128',
+              'quantity': 'apparent_bytes',
+              'byteEquivalent': '128',
+              'confidence': 'low',
+            },
+            'state': 'scanning',
+          },
+        ],
+      },
+    });
+
+    final envelope = dto.toDomain();
+
+    expect(envelope.event, isA<ScanGrowingTreeBatch>());
+    final batch = envelope.event as ScanGrowingTreeBatch;
+    expect(batch.sessionId?.value, '11');
+    expect(batch.scannedItems, BigInt.from(42));
+    expect(batch.events, hasLength(2));
+    final discovered = batch.events.first as GrowingNodeDiscovered;
+    expect(discovered.nodeId, PartialNodeId('1'));
+    expect(discovered.kind, NodeKind.directory);
+    final updated = batch.events.last as GrowingNodeSizeUpdated;
+    expect(updated.aggregateSize.rawBigInt, BigInt.from(128));
+    expect(updated.state, GrowingNodeState.scanning);
+  });
+
   test('maps session status root ids as opaque node ids', () {
     final dto = ScanSessionStatusDto.fromJson({
       'sessionId': '42',

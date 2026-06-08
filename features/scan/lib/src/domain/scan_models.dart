@@ -62,6 +62,10 @@ final class NodeId extends DecimalIdentifier {
   NodeId(super.value);
 }
 
+final class PartialNodeId extends DecimalIdentifier {
+  PartialNodeId(super.value);
+}
+
 final class EventSequence extends DecimalIdentifier {
   EventSequence(super.value);
 }
@@ -379,6 +383,55 @@ final class ScanIssue {
   final IssueCode code;
   final IssueSeverity severity;
   final IssueEvidence evidence;
+}
+
+enum GrowingNodeState {
+  discovered,
+  scanning,
+  complete,
+  skipped,
+  stale,
+  unknown,
+}
+
+final class PartialNodeItem {
+  const PartialNodeItem({
+    required this.nodeId,
+    required this.parentId,
+    required this.name,
+    required this.kind,
+    required this.aggregateSize,
+    required this.state,
+    required this.childCompleteness,
+    required this.issueCount,
+  });
+
+  final PartialNodeId nodeId;
+  final PartialNodeId? parentId;
+  final String name;
+  final NodeKind kind;
+  final SizeFact aggregateSize;
+  final GrowingNodeState state;
+  final ChildCompleteness childCompleteness;
+  final int issueCount;
+
+  PartialNodeItem copyWith({
+    SizeFact? aggregateSize,
+    GrowingNodeState? state,
+    ChildCompleteness? childCompleteness,
+    int? issueCount,
+  }) {
+    return PartialNodeItem(
+      nodeId: nodeId,
+      parentId: parentId,
+      name: name,
+      kind: kind,
+      aggregateSize: aggregateSize ?? this.aggregateSize,
+      state: state ?? this.state,
+      childCompleteness: childCompleteness ?? this.childCompleteness,
+      issueCount: issueCount ?? this.issueCount,
+    );
+  }
 }
 
 final class NodeDetails {
@@ -799,6 +852,70 @@ final class ScanProgressed extends ScanEvent {
   }) : super(sessionId: sessionId);
 
   final ScanProgress progress;
+}
+
+final class ScanGrowingTreeBatch extends ScanEvent {
+  const ScanGrowingTreeBatch({
+    required ScanSessionId sessionId,
+    required this.scannedItems,
+    required this.events,
+  }) : super(sessionId: sessionId);
+
+  final BigInt scannedItems;
+  final List<GrowingTreeEvent> events;
+}
+
+sealed class GrowingTreeEvent {
+  const GrowingTreeEvent();
+}
+
+final class GrowingNodeDiscovered extends GrowingTreeEvent {
+  const GrowingNodeDiscovered({
+    required this.nodeId,
+    required this.parentId,
+    required this.name,
+    required this.kind,
+  });
+
+  final PartialNodeId nodeId;
+  final PartialNodeId? parentId;
+  final String name;
+  final NodeKind kind;
+}
+
+final class GrowingNodeSizeUpdated extends GrowingTreeEvent {
+  const GrowingNodeSizeUpdated({
+    required this.nodeId,
+    required this.aggregateSize,
+    required this.state,
+  });
+
+  final PartialNodeId nodeId;
+  final SizeFact aggregateSize;
+  final GrowingNodeState state;
+}
+
+final class GrowingNodeCompleted extends GrowingTreeEvent {
+  const GrowingNodeCompleted({
+    required this.nodeId,
+    required this.aggregateSize,
+    required this.childCompleteness,
+  });
+
+  final PartialNodeId nodeId;
+  final SizeFact aggregateSize;
+  final ChildCompleteness childCompleteness;
+}
+
+final class GrowingNodeIssueRecorded extends GrowingTreeEvent {
+  const GrowingNodeIssueRecorded({required this.nodeId, required this.issue});
+
+  final PartialNodeId? nodeId;
+  final ScanIssue issue;
+}
+
+final class UnknownGrowingTreeEvent extends GrowingTreeEvent {
+  const UnknownGrowingTreeEvent();
 }
 
 final class ScanSnapshotPublished extends ScanEvent {

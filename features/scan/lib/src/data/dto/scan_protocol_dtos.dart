@@ -645,11 +645,55 @@ final class ScanEventEnvelopeDto {
   }
 }
 
+final class GrowingTreeEventDto {
+  const GrowingTreeEventDto({
+    required this.type,
+    required this.nodeId,
+    required this.parentId,
+    required this.name,
+    required this.kind,
+    required this.aggregateSize,
+    required this.state,
+    required this.childCompleteness,
+    required this.issue,
+  });
+
+  final String type;
+  final String? nodeId;
+  final String? parentId;
+  final String? name;
+  final String? kind;
+  final SizeFactDto? aggregateSize;
+  final String? state;
+  final String? childCompleteness;
+  final ScanIssueDto? issue;
+
+  factory GrowingTreeEventDto.fromJson(Map<String, Object?> json) {
+    return GrowingTreeEventDto(
+      type: _stringField(json, 'type'),
+      nodeId: _optionalDecimalField(json, 'nodeId'),
+      parentId: _optionalDecimalField(json, 'parentId'),
+      name: _optionalStringField(json, 'name'),
+      kind: _optionalStringField(json, 'kind'),
+      aggregateSize: _optionalObject(
+        json,
+        'aggregateSize',
+        SizeFactDto.fromJson,
+      ),
+      state: _optionalStringField(json, 'state'),
+      childCompleteness: _optionalStringField(json, 'childCompleteness'),
+      issue: _optionalObject(json, 'issue', ScanIssueDto.fromJson),
+    );
+  }
+}
+
 final class ScanEventDto {
   const ScanEventDto({
     required this.type,
     required this.sessionId,
     required this.progress,
+    required this.scannedItems,
+    required this.growingTreeEvents,
     required this.snapshotId,
     required this.message,
   });
@@ -657,6 +701,8 @@ final class ScanEventDto {
   final String type;
   final String? sessionId;
   final ScanProgressDto? progress;
+  final String? scannedItems;
+  final List<GrowingTreeEventDto> growingTreeEvents;
   final String? snapshotId;
   final String? message;
 
@@ -665,6 +711,12 @@ final class ScanEventDto {
       type: _stringField(json, 'type'),
       sessionId: _optionalDecimalField(json, 'sessionId'),
       progress: _optionalObject(json, 'progress', ScanProgressDto.fromJson),
+      scannedItems: _optionalDecimalField(json, 'scannedItems'),
+      growingTreeEvents: _optionalObjectList(
+        json,
+        'events',
+        GrowingTreeEventDto.fromJson,
+      ),
       snapshotId: _optionalDecimalField(json, 'snapshotId'),
       message: _optionalStringField(json, 'message'),
     );
@@ -962,6 +1014,21 @@ List<T> _objectListField<T>(
   T Function(Map<String, Object?> json) fromJson,
 ) {
   final value = _requiredField(json, key);
+  if (value is! List) {
+    throw FormatException('Expected list field $key');
+  }
+  return value.map((item) => fromJson(parseJsonObject(item))).toList();
+}
+
+List<T> _optionalObjectList<T>(
+  Map<String, Object?> json,
+  String key,
+  T Function(Map<String, Object?> json) fromJson,
+) {
+  final value = json[key];
+  if (value == null) {
+    return const [];
+  }
   if (value is! List) {
     throw FormatException('Expected list field $key');
   }

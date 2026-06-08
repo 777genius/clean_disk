@@ -1,11 +1,11 @@
 use clean_disk_protocol::{
     BoundaryPolicyDto, CapabilitySetDto, ChildCompletenessDto, DaemonDiagnosticsDto, DecimalU64Dto,
-    DecimalU128Dto, DecimalUsizeDto, HardlinkPolicyDto, MeasuredQuantityDto,
-    MeasuredQuantityResponseDto, NodeFlagsDto, NodeKindDto, NodePageItemDto, PROTOCOL_VERSION,
-    PathPrivacyDto, RawPathDto, ScanEventDto, ScanModeDto, ScanProgressDto, ScanSessionStatusDto,
-    ScanTargetDto, SearchPageRequestDto, SearchTextDto, SensitiveTextError, SessionStateDto,
-    SizeConfidenceDto, SizeFactDto, StartScanRequestDto, SupportLevelDto, TargetScopeDto,
-    protocol_schema,
+    DecimalU128Dto, DecimalUsizeDto, GrowingNodeStateDto, GrowingTreeEventDto, HardlinkPolicyDto,
+    MeasuredQuantityDto, MeasuredQuantityResponseDto, NodeFlagsDto, NodeKindDto, NodePageItemDto,
+    PROTOCOL_VERSION, PathPrivacyDto, RawPathDto, ScanEventDto, ScanModeDto, ScanProgressDto,
+    ScanSessionStatusDto, ScanTargetDto, SearchPageRequestDto, SearchTextDto, SensitiveTextError,
+    SessionStateDto, SizeConfidenceDto, SizeFactDto, StartScanRequestDto, SupportLevelDto,
+    TargetScopeDto, protocol_schema,
 };
 use serde_json::{Value, json};
 
@@ -221,6 +221,43 @@ fn progress_numbers_remain_decimal_strings_in_events() {
     assert_eq!(
         value["progress"]["scannedItems"],
         Value::String("9007199254740993".to_string())
+    );
+}
+
+#[test]
+fn growing_tree_batch_numbers_remain_decimal_strings_in_events() {
+    let event = ScanEventDto::GrowingTreeBatch {
+        session_id: DecimalU128Dto::from_u128(11),
+        scanned_items: DecimalU64Dto::from_u64(42),
+        events: vec![
+            GrowingTreeEventDto::NodeDiscovered {
+                node_id: DecimalU64Dto::from_u64(1),
+                parent_id: None,
+                name: "Macintosh HD".to_string(),
+                kind: NodeKindDto::Directory,
+            },
+            GrowingTreeEventDto::NodeSizeUpdated {
+                node_id: DecimalU64Dto::from_u64(1),
+                aggregate_size: SizeFactDto::new(
+                    DecimalU64Dto::from_u64(9_007_199_254_740_993),
+                    MeasuredQuantityResponseDto::ApparentBytes,
+                    Some(DecimalU64Dto::from_u64(9_007_199_254_740_993)),
+                    SizeConfidenceDto::Low,
+                ),
+                state: GrowingNodeStateDto::Scanning,
+            },
+        ],
+    };
+
+    let value = serde_json::to_value(event).expect("event json");
+
+    assert_eq!(value["type"], "growing_tree_batch");
+    assert_eq!(value["sessionId"], "11");
+    assert_eq!(value["scannedItems"], "42");
+    assert_eq!(value["events"][0]["nodeId"], "1");
+    assert_eq!(
+        value["events"][1]["aggregateSize"]["rawValue"],
+        "9007199254740993"
     );
 }
 

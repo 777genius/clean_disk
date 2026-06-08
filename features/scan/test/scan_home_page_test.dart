@@ -300,6 +300,67 @@ void main() {
     expect(find.text('1.0k items/s'), findsOneWidget);
   });
 
+  testWidgets('renders growing tree rows without selecting cleanup authority', (
+    tester,
+  ) async {
+    final fixture = FakeScanFeatureFixture(
+      repository: FakeScanRepository()..deferStartCompletion = true,
+    );
+    final result = await _pumpScanHome(
+      tester,
+      fixture: fixture,
+      size: const Size(1440, 900),
+    );
+    await result.store.start(_scanCommand());
+    await tester.pump();
+
+    result.fixture.eventClient.add(
+      ScanEventEnvelope(
+        protocolVersion: ProtocolVersion.current,
+        sequence: EventSequence('5'),
+        emittedAtUnixMs: BigInt.from(1700000020),
+        event: ScanGrowingTreeBatch(
+          sessionId: FakeScanRepository.sessionId,
+          scannedItems: BigInt.from(2),
+          events: [
+            GrowingNodeDiscovered(
+              nodeId: PartialNodeId('1'),
+              parentId: null,
+              name: 'Live Root',
+              kind: NodeKind.directory,
+            ),
+            GrowingNodeDiscovered(
+              nodeId: PartialNodeId('2'),
+              parentId: PartialNodeId('1'),
+              name: 'Live Folder',
+              kind: NodeKind.directory,
+            ),
+            GrowingNodeSizeUpdated(
+              nodeId: PartialNodeId('2'),
+              aggregateSize: SizeFact(
+                rawValue: '2048',
+                quantity: MeasuredQuantity.apparentBytes,
+                byteEquivalent: '2048',
+                confidence: SizeConfidence.low,
+              ),
+              state: GrowingNodeState.scanning,
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Live Root'), findsOneWidget);
+    expect(find.text('Live Folder'), findsOneWidget);
+
+    await tester.tap(find.text('Live Folder'));
+    await tester.pump();
+
+    expect(result.store.selectedNodeId, isNull);
+    expect(result.store.queuedItems, isEmpty);
+  });
+
   testWidgets('running footer progress is determinate and monotonic', (
     tester,
   ) async {
