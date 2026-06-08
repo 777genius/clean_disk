@@ -25,6 +25,7 @@ Design irreversible boundaries as future-shaped contracts: opaque node reference
 ## Repository Map
 
 - `START_HERE.md` - short recovery file for project context without chat history.
+- `FRONTEND_LAYOUT_GUIDE.md` - practical Headless/design-system layout rules, frontend architecture boundaries, wide/compact workflow, tree/map contracts, AI assistant placement, and verification checklist.
 - `docs/technical/README.md` - canonical technical documentation map, dependency flow, end-to-end build roadmap, work lanes, mandatory reading bundles, stop rules, implementation phases, phase gates, full document inventory, and task-specific index.
 - `docs/technical/documentation-map.md` - documentation structure, source-of-truth routing, lifecycle, maintenance rules, and anti-patterns.
 - `docs/technical/documentation-sitemap.md` - grouped visual structure of all technical documentation by area.
@@ -171,6 +172,9 @@ Feature packages must not import another feature directly. Share cross-feature c
 Do not move app-wide bootstrap decisions into feature packages. Feature packages expose modules, pages, ports, and adapters; `apps/clean_disk` decides which concrete implementation is used in the running app.
 
 ## Design Reference
+
+Before changing frontend layout or shared UI primitives, read
+`FRONTEND_LAYOUT_GUIDE.md`.
 
 Before changing user-facing UI, inspect these reference screenshots:
 

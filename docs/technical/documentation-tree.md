@@ -1,6 +1,6 @@
 # Documentation Tree
 
-Last updated: 2026-05-16.
+Last updated: 2026-06-07.
 
 This is the visual tree of Clean Disk technical documentation. Use it when the
 file list feels too flat and you need to see the structure from start to finish.
@@ -200,6 +200,9 @@ docs/technical/
   cross-platform-user-experience-playbook.md      PACKET PK6 / REFERENCE
     install, first-run, scan, cleanup, cloud, diagnostics, remote UX
 
+  market-competitive-research.md                  REFERENCE
+    market, competitor, AI assistant, benchmark, and differentiation research
+
   real-product-ux-lessons.md                      REFERENCE
     lessons from launched storage and cleanup products
 
@@ -368,4 +371,3 @@ docs/technical/critical-zones/
 | phase work | [Phase reading guide](phase-reading-guide.md), then phase docs |
 | safety-sensitive work | [Critical zones index](critical-zones/README.md), then matching gate |
 | new or changed docs | [Documentation operating manual](documentation-operating-manual.md), then [Documentation map](documentation-map.md) |
-

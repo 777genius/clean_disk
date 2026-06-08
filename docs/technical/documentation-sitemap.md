@@ -1,6 +1,6 @@
 # Documentation Sitemap
 
-Last updated: 2026-05-16.
+Last updated: 2026-06-07.
 
 This file shows the shape of the technical documentation as a map. It is for
 orientation, not for implementation details.
@@ -257,6 +257,9 @@ permission-ux-playbook.md
 
 cross-platform-user-experience-playbook.md
   install, first-run, scan, cleanup, cloud, diagnostics, remote UX
+
+market-competitive-research.md
+  market, competitor, AI assistant, benchmark, and differentiation research
 
 real-product-ux-lessons.md
   lessons from launched storage and cleanup products

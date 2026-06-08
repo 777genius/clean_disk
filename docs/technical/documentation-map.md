@@ -1,6 +1,6 @@
 # Documentation Map
 
-Last updated: 2026-05-16.
+Last updated: 2026-06-07.
 
 This file explains how Clean Disk documentation is structured and maintained.
 Use it when you do not know which file to open, where to record a decision, or
@@ -255,6 +255,7 @@ Rules:
 | Capability routing | [Capability implementation matrix](capability-implementation-matrix.md) | release train map, implementation runbook |
 | Execution order | [Implementation runbook](implementation-runbook.md) | [README](README.md) |
 | Product slice boundaries | [Release train map](release-train-map.md) | [Implementation runbook](implementation-runbook.md) |
+| Product market positioning | [Market and competitive research](market-competitive-research.md) | release train map, UX playbooks |
 | Architecture decisions | [Architecture decisions](architecture-decisions.md) | architecture fit/future risks |
 | Rust crate structure | [Rust architecture](rust-architecture.md) | Rust best practices |
 | pdu adapter contract | [Pre-coding pdu architecture research](pre-coding-pdu-architecture-research.md) | pdu data model guide, pdu Clean Architecture contract, pdu raw API contract map, pdu audit, validation, risk verification |
@@ -287,6 +288,7 @@ Rules:
 | changed capability-to-train or capability-to-gate mapping | `capability-implementation-matrix.md` |
 | changed implementation sequence | `implementation-runbook.md` |
 | changed MVP, beta, release, remote/headless, or support slice | `release-train-map.md` |
+| new market, competitor, monetization, or benchmark positioning research | `market-competitive-research.md` |
 | new global risk or release blocker | `critical-zones/<topic>.md` and critical-zones index |
 | new pdu limitation or adapter rule | pdu adapter guide, pdu audit, or pdu risk verification |
 | new platform filesystem edge case | relevant `implementation-edge-cases-*.md` |

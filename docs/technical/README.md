@@ -853,6 +853,7 @@ Use these groups when working on a specific area.
 - [Feature UX benchmark](feature-ux-benchmark.md)
 - [Permission UX playbook](permission-ux-playbook.md)
 - [Cross-platform user experience playbook](cross-platform-user-experience-playbook.md)
+- [Market and competitive research](market-competitive-research.md)
 - [Real product UX lessons](real-product-ux-lessons.md)
 - [Launched product UX playbook](launched-product-ux-playbook.md)
 - [Real product feature adoption playbook](real-product-feature-adoption-playbook.md)
@@ -958,6 +959,7 @@ merge it into an existing document.
 | [Feature UX benchmark](feature-ux-benchmark.md) | P3 | UX contract | feature-level UX contracts for the product surface |
 | [Permission UX playbook](permission-ux-playbook.md) | P3-P6 | UX contract | permission ladder, scan-quality states, repair flows |
 | [Cross-platform user experience playbook](cross-platform-user-experience-playbook.md) | P3-P7 | UX contract | install, first-run, scan, cleanup, cloud, diagnostics, remote UX |
+| [Market and competitive research](market-competitive-research.md) | P0-P7 | Research | market and competitor map, AI and safe-delete assistant landscape, benchmark methodology, differentiation, and monetization implications |
 | [Real product UX lessons](real-product-ux-lessons.md) | P3 | Research | lessons from launched storage and cleanup products |
 | [Launched product UX playbook](launched-product-ux-playbook.md) | P3 | Research | product journeys and UX/DTO spikes from launched tools |
 | [Real product feature adoption playbook](real-product-feature-adoption-playbook.md) | P3 | UX contract | feature-by-feature adoption rules from real products |
