@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:clean_disk_design_system/clean_disk_design_system.dart';
 import 'package:clean_disk_localization/clean_disk_localization.dart';
@@ -1291,28 +1290,28 @@ class _WideWorkspace extends StatelessWidget {
         ),
         const _Divider.vertical(),
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
-            child: Column(
-              children: [
-                if (_shouldShowMetricStrip(store)) ...[
-                  _MetricStrip(store: store),
-                  const SizedBox(height: 8),
-                ],
-                if (_shouldShowDiskUsageMap(store, diskUsageMapRenderer)) ...[
-                  _DiskUsageMapPanel(
-                    store: store,
-                    activeTarget: activeTarget,
-                    renderer: diskUsageMapRenderer!,
-                    collapsed: diskUsageMapCollapsed,
-                    compact: false,
-                    onToggle: onToggleDiskUsageMap,
-                    onStoreChanged: onStoreChanged,
-                  ),
-                  const SizedBox(height: 8),
-                ],
-                Expanded(
-                  child: _NodeTable(
+          child: Scrollbar(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+              child: Column(
+                children: [
+                  if (_shouldShowMetricStrip(store)) ...[
+                    _MetricStrip(store: store),
+                    const SizedBox(height: 8),
+                  ],
+                  if (_shouldShowDiskUsageMap(store, diskUsageMapRenderer)) ...[
+                    _DiskUsageMapPanel(
+                      store: store,
+                      activeTarget: activeTarget,
+                      renderer: diskUsageMapRenderer!,
+                      collapsed: diskUsageMapCollapsed,
+                      compact: false,
+                      onToggle: onToggleDiskUsageMap,
+                      onStoreChanged: onStoreChanged,
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  _NodeTable(
                     store: store,
                     activeTarget: activeTarget,
                     onScan: onScan,
@@ -1320,9 +1319,10 @@ class _WideWorkspace extends StatelessWidget {
                     onRefreshFolderTarget: onRefreshFolderTarget,
                     onClearSearch: onClearSearch,
                     onStoreChanged: onStoreChanged,
+                    rowsScrollable: false,
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -1395,8 +1395,6 @@ class _CompactWorkspace extends StatelessWidget {
   Widget build(BuildContext context) {
     final showDetailsPane =
         store.hasReadableSnapshot || store.selectedNodeId != null;
-    final viewportHeight = MediaQuery.sizeOf(context).height;
-    final treeHeight = math.max(620.0, viewportHeight * 0.68);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
@@ -1430,17 +1428,15 @@ class _CompactWorkspace extends StatelessWidget {
             ),
             const SizedBox(height: 10),
           ],
-          SizedBox(
-            height: treeHeight,
-            child: _NodeTable(
-              store: store,
-              activeTarget: activeTarget,
-              onScan: onScan,
-              showEmptyScanAction: true,
-              onRefreshFolderTarget: onRefreshFolderTarget,
-              onClearSearch: onClearSearch,
-              onStoreChanged: onStoreChanged,
-            ),
+          _NodeTable(
+            store: store,
+            activeTarget: activeTarget,
+            onScan: onScan,
+            showEmptyScanAction: true,
+            onRefreshFolderTarget: onRefreshFolderTarget,
+            onClearSearch: onClearSearch,
+            onStoreChanged: onStoreChanged,
+            rowsScrollable: false,
           ),
           if (showDetailsPane) ...[
             const SizedBox(height: 10),
@@ -1582,7 +1578,7 @@ class _DiskUsageMapPanel extends StatelessWidget {
                 : Padding(
                     padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
                     child: SizedBox(
-                      height: compact ? 260 : 320,
+                      height: compact ? 220 : 260,
                       child: DiskUsageMapView(
                         projection: projection,
                         renderer: renderer,
@@ -2021,6 +2017,7 @@ class _NodeTable extends StatelessWidget {
     required this.onRefreshFolderTarget,
     required this.onClearSearch,
     required this.onStoreChanged,
+    this.rowsScrollable = true,
   });
 
   final ScanWorkspaceStore store;
@@ -2030,6 +2027,7 @@ class _NodeTable extends StatelessWidget {
   final ValueChanged<ScanTarget> onRefreshFolderTarget;
   final VoidCallback onClearSearch;
   final VoidCallback onStoreChanged;
+  final bool rowsScrollable;
 
   @override
   Widget build(BuildContext context) {
@@ -2062,56 +2060,11 @@ class _NodeTable extends StatelessWidget {
           _TableStateBanner(state: state),
           const SizedBox(height: 8),
         ],
-        Expanded(
-          child: AppTreeTable(
-            columns: AppTreeTableColumnLabels(
-              name: l10n.nameColumn,
-              size: l10n.sizeColumn,
-              percent: l10n.percentColumn,
-              items: l10n.itemsColumn,
-            ),
-            rows: _treeRows(
-              tableRows,
-              l10n: l10n,
-              selectedNodeId: store.selectedNodeId,
-              isQueued: store.isQueued,
-              isMovedToTrash: store.isMovedToTrash,
-              stale: store.viewport.isStale,
-              disabled: false,
-              allowExpansion: store.viewport.mode == ScanQueryMode.children,
-            ),
-            showHeader: tableRows.isNotEmpty || queryBanner != null,
-            emptyState: _EmptyRowsState(
-              store: store,
-              onScan: onScan,
-              showScanAction: showEmptyScanAction,
-            ),
-            style: AppTreeTableStyle(
-              backgroundColor: _ScanColors.panel,
-              headerColor: _ScanColors.panelHeader,
-              borderColor: _ScanColors.border,
-              rowBorderColor: _ScanColors.border.withAlpha(130),
-              selectedRowColor: _ScanColors.selectedRow,
-              textColor: _ScanColors.text,
-              selectedTextColor: Colors.white,
-              mutedTextColor: _ScanColors.textSoft,
-              iconColor: _ScanColors.blue,
-              progressTrackColor: _ScanColors.progressTrack,
-              progressColor: _ScanColors.blue,
-              selectedProgressColor: _ScanColors.cyan,
-              percentFlex: 3,
-              itemsFlex: 1,
-            ),
-            onRowTap: (row) => unawaited(_selectAndMaybeToggle(row)),
-            onRowToggleExpansion: (row) => unawaited(
-              store.toggleTreeNode(NodeId(row.id)).whenComplete(onStoreChanged),
-            ),
-            onRowContextMenu: store.viewport.mode == ScanQueryMode.children
-                ? (row, position) => unawaited(
-                    _showRowContextMenu(context, row, position, tableRows),
-                  )
-                : null,
-          ),
+        _nodeTableBody(
+          context: context,
+          l10n: l10n,
+          tableRows: tableRows,
+          queryBanner: queryBanner,
         ),
         if (store.canLoadMoreVisibleTreeRows) ...[
           const SizedBox(height: 8),
@@ -2124,6 +2077,68 @@ class _NodeTable extends StatelessWidget {
         ],
       ],
     );
+  }
+
+  Widget _nodeTableBody({
+    required BuildContext context,
+    required CleanDiskLocalizations l10n,
+    required List<ScanTreeNodeRow> tableRows,
+    required _RowsStateContent? queryBanner,
+  }) {
+    final table = AppTreeTable(
+      columns: AppTreeTableColumnLabels(
+        name: l10n.nameColumn,
+        size: l10n.sizeColumn,
+        percent: l10n.percentColumn,
+        items: l10n.itemsColumn,
+      ),
+      rows: _treeRows(
+        tableRows,
+        l10n: l10n,
+        selectedNodeId: store.selectedNodeId,
+        isQueued: store.isQueued,
+        isMovedToTrash: store.isMovedToTrash,
+        stale: store.viewport.isStale,
+        disabled: false,
+        allowExpansion: store.viewport.mode == ScanQueryMode.children,
+      ),
+      showHeader: tableRows.isNotEmpty || queryBanner != null,
+      emptyState: _EmptyRowsState(
+        store: store,
+        onScan: onScan,
+        showScanAction: showEmptyScanAction,
+      ),
+      style: AppTreeTableStyle(
+        backgroundColor: _ScanColors.panel,
+        headerColor: _ScanColors.panelHeader,
+        borderColor: _ScanColors.border,
+        rowBorderColor: _ScanColors.border.withAlpha(130),
+        selectedRowColor: _ScanColors.selectedRow,
+        textColor: _ScanColors.text,
+        selectedTextColor: Colors.white,
+        mutedTextColor: _ScanColors.textSoft,
+        iconColor: _ScanColors.blue,
+        progressTrackColor: _ScanColors.progressTrack,
+        progressColor: _ScanColors.blue,
+        selectedProgressColor: _ScanColors.cyan,
+        percentFlex: 3,
+        itemsFlex: 1,
+      ),
+      rowsScrollable: rowsScrollable,
+      onRowTap: (row) => unawaited(_selectAndMaybeToggle(row)),
+      onRowToggleExpansion: (row) => unawaited(
+        store.toggleTreeNode(NodeId(row.id)).whenComplete(onStoreChanged),
+      ),
+      onRowContextMenu: store.viewport.mode == ScanQueryMode.children
+          ? (row, position) => unawaited(
+              _showRowContextMenu(context, row, position, tableRows),
+            )
+          : null,
+    );
+    if (!rowsScrollable) {
+      return table;
+    }
+    return Expanded(child: table);
   }
 
   Future<void> _selectAndMaybeToggle(AppTreeTableRow row) async {

@@ -407,11 +407,8 @@ void main() {
     expect(contentFinder, findsOneWidget);
     expect(contentRect.width, lessThanOrEqualTo(520));
     expect(contentRect.height, lessThanOrEqualTo(140));
-    expect(contentRect.center.dy, lessThan(tableRect.center.dy));
-    expect(
-      contentRect.center.dy,
-      lessThan(tableRect.top + tableRect.height * 0.44),
-    );
+    expect(contentRect.center.dy, lessThanOrEqualTo(tableRect.center.dy));
+    expect(tableRect.height, lessThanOrEqualTo(260));
   });
 
   testWidgets('wide target rail leaves room for the tree workspace', (

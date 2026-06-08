@@ -125,6 +125,8 @@ class AppTreeTable extends StatefulWidget {
     this.onRowTap,
     this.onRowToggleExpansion,
     this.onRowContextMenu,
+    this.rowsScrollable = true,
+    this.emptyStateHeight = 240,
   });
 
   final AppTreeTableColumnLabels columns;
@@ -135,6 +137,8 @@ class AppTreeTable extends StatefulWidget {
   final ValueChanged<AppTreeTableRow>? onRowTap;
   final ValueChanged<AppTreeTableRow>? onRowToggleExpansion;
   final AppTreeTableRowContextMenuCallback? onRowContextMenu;
+  final bool rowsScrollable;
+  final double emptyStateHeight;
 
   @override
   State<AppTreeTable> createState() => _AppTreeTableState();
@@ -206,6 +210,51 @@ class _AppTreeTableState extends State<AppTreeTable> {
   }
 
   Widget _buildTable() {
+    final body = widget.rows.isEmpty
+        ? widget.emptyState
+        : ListView.builder(
+            primary: false,
+            physics: widget.rowsScrollable
+                ? null
+                : const NeverScrollableScrollPhysics(),
+            itemExtent: widget.style.rowHeight,
+            itemCount: widget.rows.length,
+            itemBuilder: (context, index) {
+              final row = widget.rows[index];
+              return _AppTreeTableRowTile(
+                key: ValueKey('app-tree-table-row-${row.id}'),
+                row: row,
+                focused: row.id == _focusedRowId,
+                style: widget.style,
+                onTap: widget.onRowTap == null
+                    ? null
+                    : () {
+                        setState(() {
+                          _focusedRowId = row.id;
+                        });
+                        widget.onRowTap!(row);
+                      },
+                onToggleExpansion:
+                    widget.onRowToggleExpansion == null || !row.hasChildren
+                    ? null
+                    : () {
+                        setState(() {
+                          _focusedRowId = row.id;
+                        });
+                        widget.onRowToggleExpansion!(row);
+                      },
+                onContextMenu: widget.onRowContextMenu == null
+                    ? null
+                    : (details) {
+                        setState(() {
+                          _focusedRowId = row.id;
+                        });
+                        widget.onRowContextMenu!(row, details.globalPosition);
+                      },
+              );
+            },
+          );
+
     return Container(
       decoration: BoxDecoration(
         color: widget.style.backgroundColor,
@@ -217,56 +266,20 @@ class _AppTreeTableState extends State<AppTreeTable> {
         children: [
           if (widget.showHeader)
             _AppTreeTableHeader(columns: widget.columns, style: widget.style),
-          Expanded(
-            child: widget.rows.isEmpty
-                ? widget.emptyState
-                : ListView.builder(
-                    primary: false,
-                    itemExtent: widget.style.rowHeight,
-                    itemCount: widget.rows.length,
-                    itemBuilder: (context, index) {
-                      final row = widget.rows[index];
-                      return _AppTreeTableRowTile(
-                        key: ValueKey('app-tree-table-row-${row.id}'),
-                        row: row,
-                        focused: row.id == _focusedRowId,
-                        style: widget.style,
-                        onTap: widget.onRowTap == null
-                            ? null
-                            : () {
-                                setState(() {
-                                  _focusedRowId = row.id;
-                                });
-                                widget.onRowTap!(row);
-                              },
-                        onToggleExpansion:
-                            widget.onRowToggleExpansion == null ||
-                                !row.hasChildren
-                            ? null
-                            : () {
-                                setState(() {
-                                  _focusedRowId = row.id;
-                                });
-                                widget.onRowToggleExpansion!(row);
-                              },
-                        onContextMenu: widget.onRowContextMenu == null
-                            ? null
-                            : (details) {
-                                setState(() {
-                                  _focusedRowId = row.id;
-                                });
-                                widget.onRowContextMenu!(
-                                  row,
-                                  details.globalPosition,
-                                );
-                              },
-                      );
-                    },
-                  ),
-          ),
+          if (widget.rowsScrollable)
+            Expanded(child: body)
+          else
+            SizedBox(height: _contentRowsHeight(), child: body),
         ],
       ),
     );
+  }
+
+  double _contentRowsHeight() {
+    if (widget.rows.isEmpty) {
+      return widget.emptyStateHeight;
+    }
+    return widget.rows.length * widget.style.rowHeight;
   }
 
   void _ensureFocusedRow() {

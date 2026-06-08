@@ -97,6 +97,58 @@ void main() {
     expect(find.text('Empty'), findsOneWidget);
   });
 
+  testWidgets('can size rows to content for page-level scrolling', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark(),
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: AppTreeTable(
+              columns: columns,
+              rows: const [
+                AppTreeTableRow(
+                  id: '1',
+                  name: 'System',
+                  sizeText: '462.8 GB',
+                  percentText: '100%',
+                  itemsText: '8',
+                  progress: 1,
+                  depth: 0,
+                  selected: false,
+                  hasChildren: true,
+                  expanded: false,
+                  icon: Icons.folder_outlined,
+                ),
+                AppTreeTableRow(
+                  id: '2',
+                  name: 'Users',
+                  sizeText: '322.1 GB',
+                  percentText: '69%',
+                  itemsText: '3',
+                  progress: 0.69,
+                  depth: 0,
+                  selected: false,
+                  hasChildren: true,
+                  expanded: false,
+                  icon: Icons.folder_outlined,
+                ),
+              ],
+              emptyState: const Text('Empty'),
+              style: style,
+              rowsScrollable: false,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('System'), findsOneWidget);
+    expect(find.text('Users'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('keeps 50k-row table virtualized by visible viewport', (
     tester,
   ) async {
