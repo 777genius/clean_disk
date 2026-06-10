@@ -14,7 +14,7 @@ import 'scan_target_preferences.dart';
 
 const _scanBackend = String.fromEnvironment(
   'CLEAN_DISK_SCAN_BACKEND',
-  defaultValue: 'fake',
+  defaultValue: 'daemon',
 );
 const _scanTargetPath = String.fromEnvironment(
   'CLEAN_DISK_SCAN_TARGET',
