@@ -703,6 +703,52 @@ void main() {
     },
   );
 
+  test('keeps growing tree preview shallow while scan is running', () async {
+    final repository = _FakeScanRepository();
+    final eventClient = _FakeScanEventClient();
+    final store = _store(repository, eventClient);
+
+    await store.start(_startCommand());
+
+    store.reconcileEvent(
+      ScanEventEnvelope(
+        protocolVersion: ProtocolVersion.current,
+        sequence: EventSequence('12'),
+        emittedAtUnixMs: BigInt.from(12),
+        event: ScanGrowingTreeBatch(
+          sessionId: ScanSessionId('1'),
+          scannedItems: BigInt.from(3),
+          events: [
+            GrowingNodeDiscovered(
+              nodeId: PartialNodeId('1'),
+              parentId: null,
+              name: 'Macintosh HD',
+              kind: NodeKind.directory,
+            ),
+            GrowingNodeDiscovered(
+              nodeId: PartialNodeId('2'),
+              parentId: PartialNodeId('1'),
+              name: 'Users',
+              kind: NodeKind.directory,
+            ),
+            GrowingNodeDiscovered(
+              nodeId: PartialNodeId('3'),
+              parentId: PartialNodeId('2'),
+              name: 'belief',
+              kind: NodeKind.directory,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    expect(store.partialVisibleTreeRows.map((row) => row.item.name), [
+      'Macintosh HD',
+      'Users',
+    ]);
+    expect(store.partialVisibleTreeRows.map((row) => row.depth), [0, 1]);
+  });
+
   test('caps growing tree preview rows during large running scans', () async {
     final repository = _FakeScanRepository();
     final eventClient = _FakeScanEventClient();

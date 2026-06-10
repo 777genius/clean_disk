@@ -33,6 +33,7 @@ enum ScanQueryMode { children, search, topItems }
 
 const _diskUsageMapRequestedLimit = 512;
 const _partialScanPreviewRowLimit = 160;
+const _partialScanPreviewMaxDepth = 1;
 
 final class ScanTreeNodeRow {
   const ScanTreeNodeRow({
@@ -390,6 +391,7 @@ final class ScanWorkspaceStore with Store {
         nodeId: rootId,
         depth: 0,
         limit: _partialScanPreviewRowLimit,
+        maxDepth: _partialScanPreviewMaxDepth,
       );
     }
     return List.unmodifiable(rows);
@@ -2048,6 +2050,7 @@ final class ScanWorkspaceStore with Store {
     required PartialNodeId nodeId,
     required int depth,
     required int limit,
+    required int maxDepth,
   }) {
     if (rows.length >= limit) {
       return;
@@ -2057,6 +2060,9 @@ final class ScanWorkspaceStore with Store {
       return;
     }
     rows.add(PartialScanTreeNodeRow(item: node, depth: depth));
+    if (depth >= maxDepth) {
+      return;
+    }
     for (final childId in _partialChildrenByParent[nodeId] ?? const []) {
       if (rows.length >= limit) {
         break;
@@ -2066,6 +2072,7 @@ final class ScanWorkspaceStore with Store {
         nodeId: childId,
         depth: depth + 1,
         limit: limit,
+        maxDepth: maxDepth,
       );
     }
   }
