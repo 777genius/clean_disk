@@ -679,7 +679,9 @@ void main() {
         'Macintosh HD',
         'Users',
       ]);
-      expect(store.partialVisibleTreeRows.last.depth, 1);
+      expect(store.partialVisibleTreeRows.map((row) => row.depth), [0, 1]);
+      expect(store.partialVisibleTreeRows.first.expanded, isTrue);
+      expect(store.partialVisibleTreeRows.last.loading, isTrue);
       expect(
         store.partialVisibleRows.last.aggregateSize.rawBigInt,
         BigInt.from(128),
@@ -703,7 +705,7 @@ void main() {
     },
   );
 
-  test('keeps growing tree preview shallow while scan is running', () async {
+  test('keeps only growing tree root expanded while scan is running', () async {
     final repository = _FakeScanRepository();
     final eventClient = _FakeScanEventClient();
     final store = _store(repository, eventClient);
@@ -747,7 +749,67 @@ void main() {
       'Users',
     ]);
     expect(store.partialVisibleTreeRows.map((row) => row.depth), [0, 1]);
+
+    await store.togglePartialTreeNode(PartialNodeId('2'));
+
+    expect(store.partialVisibleTreeRows.map((row) => row.item.name), [
+      'Macintosh HD',
+      'Users',
+      'belief',
+    ]);
+    expect(store.partialVisibleTreeRows.map((row) => row.depth), [0, 1, 2]);
+
+    await store.togglePartialTreeNode(PartialNodeId('1'));
+
+    expect(store.partialVisibleTreeRows.map((row) => row.item.name), [
+      'Macintosh HD',
+    ]);
   });
+
+  test(
+    'replays early growing tree events after start returns session id',
+    () async {
+      final repository = _FakeScanRepository();
+      final eventClient = _FakeScanEventClient();
+      final store = _store(repository, eventClient);
+
+      store.reconcileEvent(
+        ScanEventEnvelope(
+          protocolVersion: ProtocolVersion.current,
+          sequence: EventSequence('12'),
+          emittedAtUnixMs: BigInt.from(12),
+          event: ScanGrowingTreeBatch(
+            sessionId: ScanSessionId('1'),
+            scannedItems: BigInt.from(2),
+            events: [
+              GrowingNodeDiscovered(
+                nodeId: PartialNodeId('1'),
+                parentId: null,
+                name: 'Macintosh HD',
+                kind: NodeKind.directory,
+              ),
+              GrowingNodeDiscovered(
+                nodeId: PartialNodeId('2'),
+                parentId: PartialNodeId('1'),
+                name: 'Users',
+                kind: NodeKind.directory,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(store.partialVisibleTreeRows, isEmpty);
+
+      await store.start(_startCommand());
+
+      expect(store.partialVisibleTreeRows.map((row) => row.item.name), [
+        'Macintosh HD',
+        'Users',
+      ]);
+      expect(store.partialVisibleTreeRows.map((row) => row.depth), [0, 1]);
+    },
+  );
 
   test('caps growing tree preview rows during large running scans', () async {
     final repository = _FakeScanRepository();

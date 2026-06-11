@@ -33,7 +33,7 @@ enum ScanQueryMode { children, search, topItems }
 
 const _diskUsageMapRequestedLimit = 512;
 const _partialScanPreviewRowLimit = 160;
-const _partialScanPreviewMaxDepth = 1;
+const _pendingScanEventLimit = 512;
 
 final class ScanTreeNodeRow {
   const ScanTreeNodeRow({
@@ -50,10 +50,19 @@ final class ScanTreeNodeRow {
 }
 
 final class PartialScanTreeNodeRow {
-  const PartialScanTreeNodeRow({required this.item, required this.depth});
+  const PartialScanTreeNodeRow({
+    required this.item,
+    required this.depth,
+    required this.hasChildren,
+    required this.expanded,
+    required this.loading,
+  });
 
   final PartialNodeItem item;
   final int depth;
+  final bool hasChildren;
+  final bool expanded;
+  final bool loading;
 }
 
 final class ScanViewportState {
@@ -241,6 +250,10 @@ final class ScanWorkspaceStore with Store {
   final ObservableMap<PartialNodeId, List<PartialNodeId>>
   _partialChildrenByParent =
       ObservableMap<PartialNodeId, List<PartialNodeId>>();
+  final ObservableMap<PartialNodeId, bool> _expandedPartialNodeIds =
+      ObservableMap<PartialNodeId, bool>();
+  final ObservableMap<PartialNodeId, bool> _collapsedPartialNodeIds =
+      ObservableMap<PartialNodeId, bool>();
   final ObservableMap<NodeId, CleanupQueueIntent> _queuedItems =
       ObservableMap<NodeId, CleanupQueueIntent>();
   final ObservableMap<NodeId, CleanupReceiptItem> _movedToTrashItems =
@@ -267,6 +280,7 @@ final class ScanWorkspaceStore with Store {
 
   StreamSubscription<Result<ScanEventEnvelope>>? _eventSubscription;
   EventSequence? _lastEventSequence;
+  final List<ScanEventEnvelope> _pendingSessionEvents = [];
   void Function()? _onChanged;
   var _searchRequestGeneration = 0;
   var _diskUsageMapRequestGeneration = 0;
@@ -391,7 +405,6 @@ final class ScanWorkspaceStore with Store {
         nodeId: rootId,
         depth: 0,
         limit: _partialScanPreviewRowLimit,
-        maxDepth: _partialScanPreviewMaxDepth,
       );
     }
     return List.unmodifiable(rows);
@@ -758,6 +771,7 @@ final class ScanWorkspaceStore with Store {
           _pageLoadState.value = ScanPageLoadState.idle;
           _lastFailure.value = null;
         });
+        _replayPendingEventsForSession(value.sessionId, value.state);
       case ResultFailure(:final failure):
         _setFailure(failure);
     }
@@ -888,6 +902,24 @@ final class ScanWorkspaceStore with Store {
     if (!_treeChildrenByParent.containsKey(nodeId)) {
       await loadMoreTreeChildren(nodeId);
     }
+  }
+
+  Future<void> togglePartialTreeNode(PartialNodeId nodeId) async {
+    final node = _partialNodesById[nodeId];
+    final hasChildren = _partialChildrenByParent[nodeId]?.isNotEmpty == true;
+    if (node == null || !hasChildren) {
+      return;
+    }
+
+    runInAction(() {
+      if (_expandedPartialNodeIds.containsKey(nodeId)) {
+        _expandedPartialNodeIds.remove(nodeId);
+        _collapsedPartialNodeIds[nodeId] = true;
+      } else {
+        _expandedPartialNodeIds[nodeId] = true;
+        _collapsedPartialNodeIds.remove(nodeId);
+      }
+    });
   }
 
   Future<void> expandTreeNode(NodeId nodeId) async {
@@ -1445,6 +1477,10 @@ final class ScanWorkspaceStore with Store {
       return;
     }
     if (currentSessionId == null || currentSessionId != eventSessionId) {
+      if (currentSessionId == null ||
+          _pageLoadState.value == ScanPageLoadState.loading) {
+        _bufferPendingSessionEvent(envelope);
+      }
       return;
     }
     if (_isTerminalSessionState(sessionStatus?.state) &&
@@ -1552,6 +1588,48 @@ final class ScanWorkspaceStore with Store {
         });
     }
     _notifyChanged();
+  }
+
+  void _bufferPendingSessionEvent(ScanEventEnvelope envelope) {
+    if (envelope.event.sessionId == null) {
+      return;
+    }
+    _pendingSessionEvents.add(envelope);
+    if (_pendingSessionEvents.length > _pendingScanEventLimit) {
+      _pendingSessionEvents.removeRange(
+        0,
+        _pendingSessionEvents.length - _pendingScanEventLimit,
+      );
+    }
+  }
+
+  void _replayPendingEventsForSession(
+    ScanSessionId sessionId,
+    SessionState initialState,
+  ) {
+    if (_pendingSessionEvents.isEmpty) {
+      return;
+    }
+    final skipTerminalEvents = !_isTerminalSessionState(initialState);
+    final events =
+        _pendingSessionEvents
+            .where((envelope) {
+              if (envelope.event.sessionId != sessionId) {
+                return false;
+              }
+              return !skipTerminalEvents || !_isTerminalEvent(envelope.event);
+            })
+            .toList(growable: false)
+          ..sort(
+            (left, right) =>
+                left.sequence.toBigInt().compareTo(right.sequence.toBigInt()),
+          );
+    _pendingSessionEvents.removeWhere(
+      (envelope) => envelope.event.sessionId == sessionId,
+    );
+    for (final envelope in events) {
+      reconcileEvent(envelope);
+    }
   }
 
   Future<void> _disposeCurrentSession(CommandId commandId) async {
@@ -2006,6 +2084,9 @@ final class ScanWorkspaceStore with Store {
       if (!_partialRootNodeIds.contains(event.nodeId)) {
         _partialRootNodeIds.add(event.nodeId);
       }
+      if (!_collapsedPartialNodeIds.containsKey(event.nodeId)) {
+        _expandedPartialNodeIds[event.nodeId] = true;
+      }
       return;
     }
 
@@ -2050,7 +2131,6 @@ final class ScanWorkspaceStore with Store {
     required PartialNodeId nodeId,
     required int depth,
     required int limit,
-    required int maxDepth,
   }) {
     if (rows.length >= limit) {
       return;
@@ -2059,11 +2139,21 @@ final class ScanWorkspaceStore with Store {
     if (node == null) {
       return;
     }
-    rows.add(PartialScanTreeNodeRow(item: node, depth: depth));
-    if (depth >= maxDepth) {
+    final children = _partialChildrenByParent[nodeId] ?? const [];
+    final expanded = _expandedPartialNodeIds.containsKey(nodeId);
+    rows.add(
+      PartialScanTreeNodeRow(
+        item: node,
+        depth: depth,
+        hasChildren: children.isNotEmpty,
+        expanded: expanded,
+        loading: node.state == GrowingNodeState.scanning,
+      ),
+    );
+    if (!expanded) {
       return;
     }
-    for (final childId in _partialChildrenByParent[nodeId] ?? const []) {
+    for (final childId in children) {
       if (rows.length >= limit) {
         break;
       }
@@ -2072,7 +2162,6 @@ final class ScanWorkspaceStore with Store {
         nodeId: childId,
         depth: depth + 1,
         limit: limit,
-        maxDepth: maxDepth,
       );
     }
   }
@@ -2096,6 +2185,8 @@ final class ScanWorkspaceStore with Store {
     _partialRootNodeIds.clear();
     _partialNodesById.clear();
     _partialChildrenByParent.clear();
+    _expandedPartialNodeIds.clear();
+    _collapsedPartialNodeIds.clear();
   }
 
   void _resetDiskUsageMapProjection() {
@@ -2156,6 +2247,12 @@ bool _isTerminalSessionState(SessionState? state) {
   return state == SessionState.completed ||
       state == SessionState.canceled ||
       state == SessionState.failed;
+}
+
+bool _isTerminalEvent(ScanEvent event) {
+  return event is ScanSnapshotPublished ||
+      event is ScanCanceled ||
+      event is ScanFailed;
 }
 
 final class _TreeChildrenPageState {

@@ -324,19 +324,19 @@ void main() {
           scannedItems: BigInt.from(2),
           events: [
             GrowingNodeDiscovered(
-              nodeId: PartialNodeId('1'),
+              nodeId: PartialNodeId('101'),
               parentId: null,
               name: 'Live Root',
               kind: NodeKind.directory,
             ),
             GrowingNodeDiscovered(
-              nodeId: PartialNodeId('2'),
-              parentId: PartialNodeId('1'),
+              nodeId: PartialNodeId('102'),
+              parentId: PartialNodeId('101'),
               name: 'Live Folder',
               kind: NodeKind.directory,
             ),
             GrowingNodeSizeUpdated(
-              nodeId: PartialNodeId('2'),
+              nodeId: PartialNodeId('102'),
               aggregateSize: SizeFact(
                 rawValue: '2048',
                 quantity: MeasuredQuantity.apparentBytes,
@@ -352,6 +352,17 @@ void main() {
     await tester.pump();
 
     expect(find.text('Live Root'), findsOneWidget);
+    expect(find.text('Live Folder'), findsOneWidget);
+
+    await tester.tap(find.text('Live Root'));
+    await tester.pump();
+
+    expect(find.text('Live Folder'), findsNothing);
+    expect(result.store.selectedNodeId, isNull);
+
+    await tester.tap(find.text('Live Root'));
+    await tester.pump();
+
     expect(find.text('Live Folder'), findsOneWidget);
 
     await tester.tap(find.text('Live Folder'));

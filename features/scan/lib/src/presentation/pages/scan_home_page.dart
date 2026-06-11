@@ -2101,7 +2101,10 @@ class _NodeTable extends StatelessWidget {
           l10n: l10n,
           tableRows: tableRows,
           contextMenuRows: finalTreeRows,
-          allowRowActions: !showPartialRows,
+          allowRowActions: true,
+          allowExpansion:
+              showPartialRows || store.viewport.mode == ScanQueryMode.children,
+          allowContextMenu: !showPartialRows,
           queryBanner: queryBanner,
         ),
         if (!showPartialRows && store.canLoadMoreVisibleTreeRows) ...[
@@ -2123,6 +2126,8 @@ class _NodeTable extends StatelessWidget {
     required List<AppTreeTableRow> tableRows,
     required List<ScanTreeNodeRow> contextMenuRows,
     required bool allowRowActions,
+    required bool allowExpansion,
+    required bool allowContextMenu,
     required _RowsStateContent? queryBanner,
   }) {
     final table = AppTreeTable(
@@ -2159,14 +2164,11 @@ class _NodeTable extends StatelessWidget {
       onRowTap: allowRowActions
           ? (row) => unawaited(_selectAndMaybeToggle(row))
           : null,
-      onRowToggleExpansion:
-          allowRowActions && store.viewport.mode == ScanQueryMode.children
-          ? (row) => unawaited(
-              store.toggleTreeNode(NodeId(row.id)).whenComplete(onStoreChanged),
-            )
+      onRowToggleExpansion: allowRowActions && allowExpansion
+          ? (row) => unawaited(_toggleExpandedFromRow(row))
           : null,
       onRowContextMenu:
-          allowRowActions && store.viewport.mode == ScanQueryMode.children
+          allowContextMenu && store.viewport.mode == ScanQueryMode.children
           ? (row, position) => unawaited(
               _showRowContextMenu(context, row, position, contextMenuRows),
             )
@@ -2179,12 +2181,34 @@ class _NodeTable extends StatelessWidget {
   }
 
   Future<void> _selectAndMaybeToggle(AppTreeTableRow row) async {
+    final partialNodeId = _partialNodeIdFromTreeRowId(row.id);
+    if (partialNodeId != null) {
+      store.clearDiskUsageMapFocus();
+      if (row.hasChildren) {
+        await store.togglePartialTreeNode(partialNodeId);
+        onStoreChanged();
+      }
+      return;
+    }
+
     final nodeId = NodeId(row.id);
     store.clearDiskUsageMapFocus();
     await store.selectNode(nodeId);
     if (store.viewport.mode == ScanQueryMode.children && row.hasChildren) {
       await store.toggleTreeNode(nodeId);
     }
+    onStoreChanged();
+  }
+
+  Future<void> _toggleExpandedFromRow(AppTreeTableRow row) async {
+    final partialNodeId = _partialNodeIdFromTreeRowId(row.id);
+    if (partialNodeId != null) {
+      await store.togglePartialTreeNode(partialNodeId);
+      onStoreChanged();
+      return;
+    }
+
+    await store.toggleTreeNode(NodeId(row.id));
     onStoreChanged();
   }
 
@@ -6072,6 +6096,23 @@ List<AppTreeTableRow> _treeRows(
   }).toList();
 }
 
+const _partialTreeRowIdPrefix = 'partial:';
+
+String _partialTreeRowId(PartialNodeId nodeId) {
+  return '$_partialTreeRowIdPrefix${nodeId.value}';
+}
+
+PartialNodeId? _partialNodeIdFromTreeRowId(String rowId) {
+  if (!rowId.startsWith(_partialTreeRowIdPrefix)) {
+    return null;
+  }
+  final value = rowId.substring(_partialTreeRowIdPrefix.length);
+  if (value.isEmpty) {
+    return null;
+  }
+  return PartialNodeId(value);
+}
+
 List<AppTreeTableRow> _partialTreeRows(List<PartialScanTreeNodeRow> rows) {
   final maxSize = rows.fold<BigInt>(
     BigInt.zero,
@@ -6086,7 +6127,7 @@ List<AppTreeTableRow> _partialTreeRows(List<PartialScanTreeNodeRow> rows) {
         ? 0.0
         : item.aggregateSize.rawBigInt.toDouble() / maxSize.toDouble();
     return AppTreeTableRow(
-      id: 'partial:${item.nodeId.value}',
+      id: _partialTreeRowId(item.nodeId),
       name: item.name,
       sizeText: _formatSize(item.aggregateSize),
       percentText: '${(percent * 100).clamp(0, 100).toStringAsFixed(1)}%',
@@ -6094,13 +6135,13 @@ List<AppTreeTableRow> _partialTreeRows(List<PartialScanTreeNodeRow> rows) {
       progress: percent,
       depth: row.depth,
       selected: false,
-      hasChildren: false,
-      expanded: true,
-      loading: item.state == GrowingNodeState.scanning,
+      hasChildren: row.hasChildren,
+      expanded: row.expanded,
+      loading: row.loading,
       queued: false,
       warning: item.issueCount > 0,
       stale: false,
-      disabled: true,
+      disabled: false,
       icon: item.kind == NodeKind.file
           ? Icons.insert_drive_file_outlined
           : Icons.folder_outlined,
