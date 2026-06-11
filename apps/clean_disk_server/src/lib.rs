@@ -462,8 +462,8 @@ impl SessionRegistry {
 
     fn push_event(&self, session_id: ScanSessionId, event: ScanEvent) {
         let mut event_was_recorded = false;
-        let growing_tree_session_id = match &event {
-            ScanEvent::GrowingTreeBatch { batch } => Some(batch.session_id()),
+        let progress_session_id = match &event {
+            ScanEvent::Progress { session_id, .. } => Some(*session_id),
             _ => None,
         };
         {
@@ -477,10 +477,10 @@ impl SessionRegistry {
         if event_was_recorded {
             let envelope = self.next_event_envelope(event);
             let mut event_log = self.event_log.lock().expect("event log poisoned");
-            if let Some(growing_tree_session_id) = growing_tree_session_id
-                && let Some(position) = event_log.iter().rposition(|envelope| {
-                    is_growing_tree_batch_for_session(envelope, growing_tree_session_id)
-                })
+            if let Some(progress_session_id) = progress_session_id
+                && let Some(position) = event_log
+                    .iter()
+                    .rposition(|envelope| is_progress_for_session(envelope, progress_session_id))
             {
                 event_log.remove(position);
             }
@@ -662,13 +662,10 @@ impl SessionRegistry {
     }
 }
 
-fn is_growing_tree_batch_for_session(
-    envelope: &ScanEventEnvelopeDto,
-    session_id: ScanSessionId,
-) -> bool {
+fn is_progress_for_session(envelope: &ScanEventEnvelopeDto, session_id: ScanSessionId) -> bool {
     matches!(
         envelope.event(),
-        ScanEventDto::GrowingTreeBatch {
+        ScanEventDto::Progress {
             session_id: event_session_id,
             ..
         } if event_session_id.to_u128() == session_id.get()
@@ -3691,7 +3688,7 @@ mod tests {
     }
 
     #[test]
-    fn event_replay_coalesces_growing_tree_batches_per_session() {
+    fn event_replay_preserves_growing_tree_batches_per_session() {
         let budget = WorkerBudget::for_profile_with_parallelism(
             ScanResourceProfile::Balanced,
             std::num::NonZeroUsize::new(4).expect("cores"),
@@ -3705,14 +3702,59 @@ mod tests {
 
         let replay = registry.event_envelopes();
 
-        assert_eq!(replay.len(), 2);
+        assert_eq!(replay.len(), 3);
         assert_eq!(replay[0].sequence().to_u64(), 1);
-        assert_eq!(replay[1].sequence().to_u64(), 3);
+        assert_eq!(replay[1].sequence().to_u64(), 2);
+        assert_eq!(replay[2].sequence().to_u64(), 3);
         match replay[1].event() {
+            ScanEventDto::GrowingTreeBatch { scanned_items, .. } => {
+                assert_eq!(scanned_items.to_u64(), 10);
+            }
+            other => panic!("expected growing tree batch, got {other:?}"),
+        }
+        match replay[2].event() {
             ScanEventDto::GrowingTreeBatch { scanned_items, .. } => {
                 assert_eq!(scanned_items.to_u64(), 20);
             }
             other => panic!("expected growing tree batch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn event_replay_coalesces_progress_per_session() {
+        let budget = WorkerBudget::for_profile_with_parallelism(
+            ScanResourceProfile::Balanced,
+            std::num::NonZeroUsize::new(4).expect("cores"),
+        );
+        let registry = SessionRegistry::new(budget, 8, 1);
+        let session_id = ScanSessionId::new(1).expect("session id");
+        registry.insert_running(session_id, CancellationToken::new());
+        registry.push_event(session_id, ScanEvent::Started { session_id });
+        registry.push_event(
+            session_id,
+            ScanEvent::Progress {
+                session_id,
+                scanned_items: 10,
+            },
+        );
+        registry.push_event(
+            session_id,
+            ScanEvent::Progress {
+                session_id,
+                scanned_items: 20,
+            },
+        );
+
+        let replay = registry.event_envelopes();
+
+        assert_eq!(replay.len(), 2);
+        assert_eq!(replay[0].sequence().to_u64(), 1);
+        assert_eq!(replay[1].sequence().to_u64(), 3);
+        match replay[1].event() {
+            ScanEventDto::Progress { progress, .. } => {
+                assert_eq!(progress.scanned_items().to_u64(), 20);
+            }
+            other => panic!("expected progress, got {other:?}"),
         }
     }
 
