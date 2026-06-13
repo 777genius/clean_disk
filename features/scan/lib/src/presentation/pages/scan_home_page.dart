@@ -42,6 +42,7 @@ class _ScanHomePageState extends State<ScanHomePage> {
   var _isLoadingSnapshotRows = false;
   var _targetHydrated = false;
   var _targetChooserVisible = false;
+  var _aiPaneCollapsed = false;
   var _detailsPaneCollapsed = false;
   var _diskUsageMapCollapsed = false;
   var _uiRefreshScheduled = false;
@@ -106,6 +107,7 @@ class _ScanHomePageState extends State<ScanHomePage> {
           canScan: _canRunScan,
           scanFeedbackActive: _scanFeedbackActive,
           showTargetChooser: _targetChooserVisible,
+          aiPaneCollapsed: _aiPaneCollapsed,
           detailsPaneCollapsed: _detailsPaneCollapsed,
           diskUsageMapRenderer: widget.diskUsageMapRenderer,
           diskUsageMapCollapsed: _diskUsageMapCollapsed,
@@ -113,6 +115,7 @@ class _ScanHomePageState extends State<ScanHomePage> {
           onPause: () => _cancelScan(widget.store),
           onPickTarget: () => unawaited(_pickScanTarget(widget.store)),
           onToggleDetailsPane: _toggleDetailsPane,
+          onToggleAiPane: _toggleAiPane,
           onToggleDiskUsageMap: _toggleDiskUsageMap,
           onChooseTarget: (choice) =>
               unawaited(_selectScanTarget(widget.store, choice.target)),
@@ -149,6 +152,12 @@ class _ScanHomePageState extends State<ScanHomePage> {
   void _toggleDiskUsageMap() {
     setState(() {
       _diskUsageMapCollapsed = !_diskUsageMapCollapsed;
+    });
+  }
+
+  void _toggleAiPane() {
+    setState(() {
+      _aiPaneCollapsed = !_aiPaneCollapsed;
     });
   }
 
@@ -833,12 +842,14 @@ class ScanWorkspaceView extends StatelessWidget {
     required this.canScan,
     required this.scanFeedbackActive,
     required this.showTargetChooser,
+    required this.aiPaneCollapsed,
     required this.detailsPaneCollapsed,
     required this.diskUsageMapCollapsed,
     this.diskUsageMapRenderer,
     required this.onScan,
     required this.onPause,
     required this.onPickTarget,
+    required this.onToggleAiPane,
     required this.onToggleDetailsPane,
     required this.onToggleDiskUsageMap,
     required this.onChooseTarget,
@@ -863,12 +874,14 @@ class ScanWorkspaceView extends StatelessWidget {
   final bool canScan;
   final bool scanFeedbackActive;
   final bool showTargetChooser;
+  final bool aiPaneCollapsed;
   final bool detailsPaneCollapsed;
   final bool diskUsageMapCollapsed;
   final DiskUsageMapRenderer? diskUsageMapRenderer;
   final VoidCallback? onScan;
   final VoidCallback onPause;
   final VoidCallback onPickTarget;
+  final VoidCallback onToggleAiPane;
   final VoidCallback onToggleDetailsPane;
   final VoidCallback onToggleDiskUsageMap;
   final ValueChanged<ScanTargetChoice> onChooseTarget;
@@ -961,6 +974,8 @@ class ScanWorkspaceView extends StatelessWidget {
                               diskUsageMapRenderer: diskUsageMapRenderer,
                               diskUsageMapCollapsed: diskUsageMapCollapsed,
                               onToggleDiskUsageMap: onToggleDiskUsageMap,
+                              aiPaneCollapsed: aiPaneCollapsed,
+                              onToggleAiPane: onToggleAiPane,
                               detailsPaneCollapsed: detailsPaneCollapsed,
                               onToggleDetailsPane: onToggleDetailsPane,
                             ),
@@ -1274,11 +1289,14 @@ class _WideWorkspace extends StatefulWidget {
     required this.diskUsageMapRenderer,
     required this.diskUsageMapCollapsed,
     required this.onToggleDiskUsageMap,
+    required this.aiPaneCollapsed,
+    required this.onToggleAiPane,
     required this.detailsPaneCollapsed,
     required this.onToggleDetailsPane,
   });
 
   static const _assistantRailWidth = 340.0;
+  static const _collapsedAssistantRailWidth = 52.0;
   static const _detailsPaneWidth = 380.0;
   static const _collapsedDetailsPaneWidth = 52.0;
 
@@ -1293,6 +1311,8 @@ class _WideWorkspace extends StatefulWidget {
   final DiskUsageMapRenderer? diskUsageMapRenderer;
   final bool diskUsageMapCollapsed;
   final VoidCallback onToggleDiskUsageMap;
+  final bool aiPaneCollapsed;
+  final VoidCallback onToggleAiPane;
   final bool detailsPaneCollapsed;
   final VoidCallback onToggleDetailsPane;
 
@@ -1317,13 +1337,25 @@ class _WideWorkspaceState extends State<_WideWorkspace> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          key: const ValueKey('scan-ai-rail'),
-          width: _WideWorkspace._assistantRailWidth,
-          child: _AiAssistantRail(
-            store: widget.store,
-            activeTarget: widget.activeTarget,
-            onScan: widget.onScan,
+        AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.centerLeft,
+          child: SizedBox(
+            key: const ValueKey('scan-ai-rail'),
+            width: widget.aiPaneCollapsed
+                ? _WideWorkspace._collapsedAssistantRailWidth
+                : _WideWorkspace._assistantRailWidth,
+            child: ClipRect(
+              child: widget.aiPaneCollapsed
+                  ? _CollapsedAiRail(onExpand: widget.onToggleAiPane)
+                  : _AiAssistantRail(
+                      store: widget.store,
+                      activeTarget: widget.activeTarget,
+                      onScan: widget.onScan,
+                      onCollapse: widget.onToggleAiPane,
+                    ),
+            ),
           ),
         ),
         const _Divider.vertical(),
@@ -1930,11 +1962,13 @@ class _AiAssistantRail extends StatelessWidget {
     required this.store,
     required this.activeTarget,
     required this.onScan,
+    required this.onCollapse,
   });
 
   final ScanWorkspaceStore store;
   final ScanTarget activeTarget;
   final VoidCallback? onScan;
+  final VoidCallback onCollapse;
 
   @override
   Widget build(BuildContext context) {
@@ -1998,6 +2032,14 @@ class _AiAssistantRail extends StatelessWidget {
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(width: 8),
+              _PaneToggleAction(
+                buttonKey: const ValueKey('scan-ai-collapse-action'),
+                icon: Icons.keyboard_double_arrow_left,
+                iconColor: _ScanColors.cyan,
+                tooltip: 'AI-помощник',
+                onTap: onCollapse,
               ),
             ],
           ),
@@ -2097,6 +2139,59 @@ class _AiAssistantRail extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CollapsedAiRail extends StatelessWidget {
+  const _CollapsedAiRail({required this.onExpand});
+
+  final VoidCallback onExpand;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('scan-ai-collapsed-rail'),
+      width: _WideWorkspace._collapsedAssistantRailWidth,
+      color: _ScanColors.background,
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        children: [
+          _PaneToggleAction(
+            buttonKey: const ValueKey('scan-ai-expand-action'),
+            icon: Icons.keyboard_double_arrow_right,
+            tooltip: 'AI-помощник',
+            onTap: onExpand,
+          ),
+          const SizedBox(height: 8),
+          _PaneToggleAction(
+            buttonKey: const ValueKey('scan-ai-indicator-action'),
+            icon: Icons.auto_awesome,
+            iconColor: _ScanColors.cyan,
+            tooltip: 'AI-помощник',
+            onTap: onExpand,
+          ),
+          const SizedBox(height: 14),
+          RotatedBox(
+            quarterTurns: 3,
+            child: Text(
+              'AI',
+              maxLines: 1,
+              style: _titleStyle(context).copyWith(
+                color: _ScanColors.cyan,
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const Spacer(),
+          Icon(
+            Icons.chat_bubble_outline,
+            color: _ScanColors.textSoft.withValues(alpha: 0.72),
+            size: 18,
+          ),
         ],
       ),
     );

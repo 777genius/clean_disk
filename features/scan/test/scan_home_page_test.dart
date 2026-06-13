@@ -563,6 +563,44 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('wide AI rail collapses to the left and expands back', (
+    tester,
+  ) async {
+    await _pumpScanHome(tester, size: const Size(1440, 900));
+
+    expect(
+      find.byKey(const ValueKey('scan-ai-collapse-action')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('scan-ai-collapsed-rail')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('scan-ai-collapse-action')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('scan-ai-chat-input')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('scan-ai-collapsed-rail')),
+      findsOneWidget,
+    );
+    expect(
+      tester.getSize(find.byKey(const ValueKey('scan-ai-rail'))).width,
+      52,
+    );
+    expect(find.byKey(const ValueKey('scan-ai-expand-action')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('scan-ai-indicator-action')),
+      findsOneWidget,
+    );
+    expect(find.text('AI'), findsWidgets);
+
+    await tester.tap(find.byKey(const ValueKey('scan-ai-indicator-action')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('scan-ai-collapsed-rail')), findsNothing);
+    expect(find.byKey(const ValueKey('scan-ai-chat-input')), findsOneWidget);
+    expect(find.text('AI-помощник'), findsOneWidget);
+  });
+
   testWidgets('wide toolbar gives search enough room on common desktop width', (
     tester,
   ) async {
