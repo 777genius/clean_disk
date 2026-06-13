@@ -22,26 +22,27 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('No scan data yet'), findsOneWidget);
-    expect(find.text('Permission Proof'), findsOneWidget);
-    expect(find.text('Verified'), findsOneWidget);
+    expect(find.byKey(const ValueKey('scan-ai-rail')), findsOneWidget);
+    expect(find.byKey(const ValueKey('scan-ai-chat-input')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('scan-target-breadcrumb')),
+      findsOneWidget,
+    );
+
+    await _openTargetMenu(tester);
+    expect(
+      find.byKey(const ValueKey('scan-target-header-menu')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('scan-target-menu-current')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Permission Proof'), findsOneWidget);
+    expect(find.textContaining('Verified'), findsOneWidget);
     expect(find.text('Probe pending'), findsNothing);
     expect(find.text('Unverified'), findsNothing);
-    expect(find.text('Current process'), findsNothing);
-    expect(find.textContaining('Development build'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('permission-proof-compact')),
-      findsOneWidget,
-    );
-    expect(
-      tester
-          .getSize(find.byKey(const ValueKey('permission-proof-compact')))
-          .height,
-      lessThanOrEqualTo(96),
-    );
-    expect(
-      find.byKey(const ValueKey('permission-warning-compact')),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Development build'), findsNothing);
     expect(
       find.byKey(const ValueKey('permission-warning-prominent')),
       findsNothing,
@@ -49,12 +50,6 @@ void main() {
     expect(
       find.byKey(const ValueKey('permission-proof-neutral')),
       findsNothing,
-    );
-    expect(
-      find.textContaining(
-        'Access is verified. Full Disk Access may differ in a signed build.',
-      ),
-      findsOneWidget,
     );
     expect(
       find.text('Reduced dev package - verify signed build'),
@@ -65,9 +60,13 @@ void main() {
 
     await tester.tap(find.byTooltip('Re-check'));
     await tester.pumpAndSettle();
-    expect(find.text('Verified'), findsOneWidget);
+    expect(find.textContaining('Verified'), findsOneWidget);
     expect(find.text('Not checked'), findsNothing);
 
+    await tester.tap(
+      find.byKey(const ValueKey('scan-target-breadcrumb-action')),
+    );
+    await tester.pumpAndSettle();
     await _tapScanAction(tester);
     await tester.pumpAndSettle();
 
@@ -99,8 +98,9 @@ void main() {
 
     await _pumpScanHome(tester, size: const Size(1440, 900), fixture: fixture);
 
+    await _openTargetMenu(tester);
     expect(
-      find.byKey(const ValueKey('permission-proof-neutral')),
+      find.byKey(const ValueKey('scan-target-menu-permission-line')),
       findsOneWidget,
     );
     expect(find.text('Access not verified'), findsNothing);
@@ -112,14 +112,12 @@ void main() {
       find.byKey(const ValueKey('permission-warning-prominent')),
       findsNothing,
     );
-    expect(find.text('Access checks before scanning.'), findsOneWidget);
     expect(
-      tester
-          .getSize(find.byKey(const ValueKey('permission-proof-neutral')))
-          .height,
-      lessThanOrEqualTo(34),
+      find.byKey(const ValueKey('permission-proof-neutral')),
+      findsNothing,
     );
-    expect(find.byTooltip('Re-check'), findsNothing);
+    expect(find.textContaining('Unknown'), findsOneWidget);
+    expect(find.byTooltip('Re-check'), findsOneWidget);
     expect(find.text('Development build'), findsNothing);
     expect(find.text('Not checked'), findsNothing);
   });
@@ -361,7 +359,8 @@ void main() {
     expect(result.store.sessionStatus?.state, SessionState.running);
     expect(find.text('TOTAL SCANNED'), findsOneWidget);
     expect(find.text('LARGEST FOLDER'), findsOneWidget);
-    expect(find.text('Scanning'), findsNWidgets(5));
+    expect(find.text('Scanning'), findsNWidgets(4));
+    expect(find.textContaining('Сканирую'), findsOneWidget);
     expect(find.text('208214 files'), findsOneWidget);
     expect(find.text('Finding largest folders'), findsOneWidget);
     expect(find.text('Run a scan'), findsNothing);
@@ -498,7 +497,6 @@ void main() {
     expect(find.text('LARGEST FOLDER'), findsNothing);
     expect(find.text('REVIEW LIST'), findsNothing);
     expect(find.text('SKIPPED'), findsNothing);
-    expect(find.byKey(const ValueKey('scan-drive-summary')), findsNothing);
     expect(find.text('0 B'), findsNothing);
 
     await _tapScanAction(tester);
@@ -508,7 +506,7 @@ void main() {
     expect(find.text('LARGEST FOLDER'), findsOneWidget);
     expect(find.text('REVIEW LIST'), findsNothing);
     expect(find.text('SKIPPED'), findsNothing);
-    expect(find.byKey(const ValueKey('scan-drive-summary')), findsOneWidget);
+    expect(find.byKey(const ValueKey('scan-ai-focus-summary')), findsOneWidget);
     expect(find.text('0 B'), findsNothing);
     expect(find.text('386.4 GB'), findsWidgets);
   });
@@ -550,18 +548,18 @@ void main() {
     expect(tableRect.height, lessThanOrEqualTo(260));
   });
 
-  testWidgets('wide target rail leaves room for the tree workspace', (
+  testWidgets('wide AI rail leaves room for the tree workspace', (
     tester,
   ) async {
     await _pumpScanHome(tester, size: const Size(1440, 900));
 
-    final railSize = tester.getSize(
-      find.byKey(const ValueKey('scan-target-rail')),
-    );
+    final railSize = tester.getSize(find.byKey(const ValueKey('scan-ai-rail')));
     final tableRect = tester.getRect(find.byType(AppTreeTable));
 
-    expect(railSize.width, lessThanOrEqualTo(300));
-    expect(tableRect.width, greaterThanOrEqualTo(900));
+    expect(find.text('AI-помощник'), findsOneWidget);
+    expect(find.byKey(const ValueKey('scan-ai-chat-input')), findsOneWidget);
+    expect(railSize.width, lessThanOrEqualTo(360));
+    expect(tableRect.width, greaterThanOrEqualTo(760));
     expect(tester.takeException(), isNull);
   });
 
@@ -705,11 +703,11 @@ void main() {
       permissionRepairLauncher: launcher,
     );
 
-    expect(find.text('Current process'), findsOneWidget);
-    expect(find.text('Guide Full Disk Access, then re-check'), findsOneWidget);
+    await _openTargetMenu(tester);
+    expect(find.textContaining('Denied'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('permission-warning-prominent')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.byKey(const ValueKey('permission-warning-compact')),
@@ -718,6 +716,10 @@ void main() {
     expect(
       find.byKey(const ValueKey('permission-proof-neutral')),
       findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('permission-repair-action')),
+      findsOneWidget,
     );
 
     await tester.tap(find.byKey(const ValueKey('permission-repair-action')));
@@ -745,7 +747,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(launcher.targets.single.path.value, '/tmp/clean-disk-fixture');
-    expect(find.text('Verified'), findsOneWidget);
+    expect(find.textContaining('Verified'), findsOneWidget);
   });
 
   testWidgets(
@@ -777,6 +779,7 @@ void main() {
         permissionRepairLauncher: launcher,
       );
 
+      await _openTargetMenu(tester);
       await tester.tap(find.byKey(const ValueKey('permission-repair-action')));
       await tester.pumpAndSettle();
       await tester.tap(
@@ -785,8 +788,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(launcher.targets.single.path.value, '/tmp/clean-disk-fixture');
-      expect(find.text('Denied'), findsOneWidget);
-      expect(find.text('Verified'), findsNothing);
+      expect(find.textContaining('Denied'), findsOneWidget);
+      expect(find.textContaining('Verified'), findsNothing);
     },
   );
 
@@ -1090,7 +1093,10 @@ void main() {
       targetPicker: picker,
     );
 
-    await tester.tap(find.byKey(const ValueKey('scan-target-picker-action')));
+    await _openTargetMenu(tester);
+    await tester.tap(
+      find.byKey(const ValueKey('scan-target-menu-open-picker-action')),
+    );
     await tester.pumpAndSettle();
     await _tapScanAction(tester);
     await tester.pumpAndSettle();
@@ -1106,7 +1112,7 @@ void main() {
     );
   });
 
-  testWidgets('configured target row is static when config target wins', (
+  testWidgets('configured target remains available from header picker', (
     tester,
   ) async {
     final picker = _RecordingScanTargetPicker(ScanTargetPath('/Users/belief'));
@@ -1121,12 +1127,18 @@ void main() {
       find.byKey(const ValueKey('scan-target-breadcrumb-action')),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const ValueKey('scan-target-picker-action')),
-      findsNothing,
-    );
-    expect(find.byIcon(Icons.keyboard_arrow_down_rounded), findsNothing);
+    expect(find.byIcon(Icons.keyboard_arrow_down_rounded), findsOneWidget);
     expect(find.byTooltip('Change folder'), findsNothing);
+
+    await _openTargetMenu(tester);
+    expect(
+      find.byKey(const ValueKey('scan-target-header-menu')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('scan-target-menu-open-picker-action')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('top breadcrumb picks a concrete folder for the next scan', (
@@ -1148,8 +1160,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await _openTargetMenu(tester);
     await tester.tap(
-      find.byKey(const ValueKey('scan-target-breadcrumb-action')),
+      find.byKey(const ValueKey('scan-target-menu-pick-folder-action')),
     );
     await tester.pumpAndSettle();
 
@@ -1173,7 +1186,7 @@ void main() {
     );
   });
 
-  testWidgets('wide saved target row has a full-width change target action', (
+  testWidgets('wide header target menu exposes saved target actions', (
     tester,
   ) async {
     final picker = _RecordingScanTargetPicker(ScanTargetPath('/Users/belief'));
@@ -1188,40 +1201,35 @@ void main() {
     );
 
     expect(find.byTooltip('Change folder'), findsNothing);
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('scan-target-picker-action')),
-        matching: find.byIcon(Icons.keyboard_arrow_down_rounded),
-      ),
-      findsNothing,
-    );
     expect(find.text('Folder'), findsNothing);
     final targetRect = tester.getRect(
-      find.byKey(const ValueKey('scan-target-current')),
-    );
-    final targetSize = tester.getSize(
-      find.byKey(const ValueKey('scan-target-current')),
-    );
-    final targetCard = tester.widget<Container>(
-      find.byKey(const ValueKey('scan-target-current')),
-    );
-    final targetDecoration = targetCard.decoration! as BoxDecoration;
-    final targetBorder = targetDecoration.border! as Border;
-    final pickerSize = tester.getSize(
-      find.byKey(const ValueKey('scan-target-picker-action')),
+      find.byKey(const ValueKey('scan-target-breadcrumb')),
     );
     expect(targetRect.top, lessThanOrEqualTo(82));
-    expect(targetBorder.top.color, const Color(0xFF263148));
-    expect(pickerSize.width, greaterThanOrEqualTo(targetSize.width * 0.9));
-    expect(pickerSize.height, greaterThanOrEqualTo(targetSize.height * 0.9));
 
-    await tester.tap(find.byKey(const ValueKey('scan-target-current')));
+    await _openTargetMenu(tester);
+    expect(
+      find.byKey(const ValueKey('scan-target-menu-current')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('scan-target-menu-pick-folder-action')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('scan-target-menu-open-picker-action')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('scan-target-menu-pick-folder-action')),
+    );
     await tester.pumpAndSettle();
 
     expect(picker.initialPaths.single.value, '/');
   });
 
-  testWidgets('wide target rail renders concrete catalog folders', (
+  testWidgets('wide header target menu renders concrete catalog folders', (
     tester,
   ) async {
     await _pumpScanHome(
@@ -1260,96 +1268,101 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('scan-target-current')), findsOneWidget);
+    await _openTargetMenu(tester);
     expect(
-      find.byKey(const ValueKey('scan-target-choice-downloads')),
+      find.byKey(const ValueKey('scan-target-menu-current')),
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey('scan-target-choice-library')),
+      find.byKey(const ValueKey('scan-target-menu-choice-downloads')),
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey('scan-target-choice-applications')),
+      find.byKey(const ValueKey('scan-target-menu-choice-library')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('scan-target-menu-choice-applications')),
       findsOneWidget,
     );
   });
 
-  testWidgets('wide target rail presets remain selectable with config target', (
-    tester,
-  ) async {
-    final preferences = _RecordingScanTargetPreferenceStore();
-    final targetCatalog = _SequencedScanTargetCatalog([
-      [
-        _choice(
-          id: 'home',
-          kind: ScanTargetChoiceKind.home,
-          path: '/Users/belief',
-          displayName: 'Home',
+  testWidgets(
+    'wide header target presets remain selectable with config target',
+    (tester) async {
+      final preferences = _RecordingScanTargetPreferenceStore();
+      final targetCatalog = _SequencedScanTargetCatalog([
+        [
+          _choice(
+            id: 'home',
+            kind: ScanTargetChoiceKind.home,
+            path: '/Users/belief',
+            displayName: 'Home',
+          ),
+          _choice(
+            id: 'downloads',
+            kind: ScanTargetChoiceKind.downloads,
+            path: '/Users/belief/Downloads',
+            displayName: 'Downloads',
+          ),
+        ],
+        [
+          _choice(
+            id: 'downloads',
+            kind: ScanTargetChoiceKind.downloads,
+            path: '/Users/belief/Downloads',
+            displayName: 'Downloads',
+          ),
+          _choice(
+            id: 'library',
+            kind: ScanTargetChoiceKind.library,
+            path: '/Users/belief/Library',
+            displayName: 'Library',
+          ),
+        ],
+      ]);
+      final result = await _pumpScanHome(
+        tester,
+        size: const Size(1440, 900),
+        config: const ScanWorkspaceConfig(
+          defaultTargetPath: '/Users/belief',
+          requiresInitialTargetSelection: false,
         ),
-        _choice(
-          id: 'downloads',
-          kind: ScanTargetChoiceKind.downloads,
-          path: '/Users/belief/Downloads',
-          displayName: 'Downloads',
-        ),
-      ],
-      [
-        _choice(
-          id: 'downloads',
-          kind: ScanTargetChoiceKind.downloads,
-          path: '/Users/belief/Downloads',
-          displayName: 'Downloads',
-        ),
-        _choice(
-          id: 'library',
-          kind: ScanTargetChoiceKind.library,
-          path: '/Users/belief/Library',
-          displayName: 'Library',
-        ),
-      ],
-    ]);
-    final result = await _pumpScanHome(
-      tester,
-      size: const Size(1440, 900),
-      config: const ScanWorkspaceConfig(
-        defaultTargetPath: '/Users/belief',
-        requiresInitialTargetSelection: false,
-      ),
-      targetPreferenceStore: preferences,
-      targetCatalog: targetCatalog,
-    );
-    await tester.pumpAndSettle();
+        targetPreferenceStore: preferences,
+        targetCatalog: targetCatalog,
+      );
+      await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(const ValueKey('scan-target-picker-action')),
-      findsNothing,
-    );
+      await _openTargetMenu(tester);
 
-    await tester.tap(
-      find.byKey(const ValueKey('scan-target-choice-action-downloads')),
-    );
-    await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('scan-target-menu-choice-downloads')),
+      );
+      await tester.pumpAndSettle();
 
-    expect(
-      preferences.savedTargets.single.path.value,
-      '/Users/belief/Downloads',
-    );
-    expect(targetCatalog.listCalls, greaterThanOrEqualTo(2));
-    expect(
-      find.byKey(const ValueKey('scan-target-choice-library')),
-      findsOneWidget,
-    );
-    expect(find.byKey(const ValueKey('scan-target-choice-home')), findsNothing);
+      expect(
+        preferences.savedTargets.single.path.value,
+        '/Users/belief/Downloads',
+      );
+      expect(targetCatalog.listCalls, greaterThanOrEqualTo(2));
+      expect(
+        find.byKey(const ValueKey('scan-target-menu-choice-library')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('scan-target-menu-choice-home')),
+        findsNothing,
+      );
 
-    await _tapScanAction(tester);
-    await tester.pumpAndSettle();
+      await _tapScanAction(tester);
+      await tester.pumpAndSettle();
 
-    expect(
-      result.fixture.repository.lastStartCommand?.targets.single.path.value,
-      '/Users/belief/Downloads',
-    );
-  });
+      expect(
+        result.fixture.repository.lastStartCommand?.targets.single.path.value,
+        '/Users/belief/Downloads',
+      );
+    },
+  );
 
   testWidgets(
     'first-run chooser blocks ambiguous start until target is chosen',
@@ -1510,7 +1523,8 @@ void main() {
       fixture.repository.permissionProbeTargets.single.path.value,
       '/tmp/clean-disk-fixture',
     );
-    expect(find.text('Verified'), findsOneWidget);
+    await _openTargetMenu(tester);
+    expect(find.textContaining('Verified'), findsOneWidget);
     expect(find.text('Probe pending'), findsNothing);
   });
 
@@ -1996,6 +2010,11 @@ Future<void> _tapScanAction(WidgetTester tester) async {
     return;
   }
   await tester.tap(find.byTooltip('Scan'));
+}
+
+Future<void> _openTargetMenu(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('scan-target-breadcrumb-action')));
+  await tester.pumpAndSettle();
 }
 
 String _diskUsageMapLabels(WidgetTester tester) {

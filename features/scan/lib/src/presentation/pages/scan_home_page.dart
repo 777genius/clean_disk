@@ -882,15 +882,23 @@ class ScanWorkspaceView extends StatelessWidget {
                       currentSort: store.viewport.sort,
                       queryMode: store.viewport.mode,
                       activeTarget: activeTarget,
+                      targetChoices: store.targetChoices,
+                      isLoadingTargetChoices: store.isLoadingTargetChoices,
+                      runtimeProof: store.runtimeProof,
                       scanActionLabel: scanActionLabel,
                       canSearch: store.hasReadableSnapshot,
                       canSort: store.visibleRows.isNotEmpty,
                       canPickTarget:
                           store.canPickScanTarget &&
                           store.sessionStatus?.state != SessionState.running,
+                      canRepairPermission: store.canRepairPermission,
                       canScan: canScan,
                       onScan: onScan,
                       onPickTarget: onPickTarget,
+                      onChooseTarget: onChooseTarget,
+                      onChooseFolderTarget: onChooseFolderTarget,
+                      onPermissionProbe: onPermissionProbe,
+                      onPermissionRepair: onPermissionRepair,
                       onPause: onPause,
                       canCancelScan: store.canCancelScan,
                       onSearchChanged: onSearchChanged,
@@ -919,17 +927,12 @@ class ScanWorkspaceView extends StatelessWidget {
                           : _WideWorkspace(
                               store: store,
                               activeTarget: activeTarget,
-                              canChangeTarget: canChangeTarget,
                               onScan: onScan,
-                              onPickTarget: onPickTarget,
-                              onPermissionProbe: onPermissionProbe,
-                              onPermissionRepair: onPermissionRepair,
                               onRefreshCleanupPreview: onRefreshCleanupPreview,
                               onExecuteCleanup: onExecuteCleanup,
                               onRefreshFolderTarget: onRefreshFolderTarget,
                               onClearSearch: onClearSearch,
                               onStoreChanged: onStoreChanged,
-                              onChooseTarget: onChooseTarget,
                               diskUsageMapRenderer: diskUsageMapRenderer,
                               diskUsageMapCollapsed: diskUsageMapCollapsed,
                               onToggleDiskUsageMap: onToggleDiskUsageMap,
@@ -1226,17 +1229,12 @@ class _WideWorkspace extends StatefulWidget {
   const _WideWorkspace({
     required this.store,
     required this.activeTarget,
-    required this.canChangeTarget,
     required this.onScan,
-    required this.onPickTarget,
-    required this.onPermissionProbe,
-    required this.onPermissionRepair,
     required this.onRefreshCleanupPreview,
     required this.onExecuteCleanup,
     required this.onRefreshFolderTarget,
     required this.onClearSearch,
     required this.onStoreChanged,
-    required this.onChooseTarget,
     required this.diskUsageMapRenderer,
     required this.diskUsageMapCollapsed,
     required this.onToggleDiskUsageMap,
@@ -1244,23 +1242,18 @@ class _WideWorkspace extends StatefulWidget {
     required this.onToggleDetailsPane,
   });
 
-  static const _targetRailWidth = 292.0;
+  static const _assistantRailWidth = 340.0;
   static const _detailsPaneWidth = 380.0;
   static const _collapsedDetailsPaneWidth = 52.0;
 
   final ScanWorkspaceStore store;
   final ScanTarget activeTarget;
-  final bool canChangeTarget;
   final VoidCallback? onScan;
-  final VoidCallback onPickTarget;
-  final VoidCallback onPermissionProbe;
-  final VoidCallback onPermissionRepair;
   final VoidCallback onRefreshCleanupPreview;
   final VoidCallback onExecuteCleanup;
   final ValueChanged<ScanTarget> onRefreshFolderTarget;
   final VoidCallback onClearSearch;
   final VoidCallback onStoreChanged;
-  final ValueChanged<ScanTargetChoice> onChooseTarget;
   final DiskUsageMapRenderer? diskUsageMapRenderer;
   final bool diskUsageMapCollapsed;
   final VoidCallback onToggleDiskUsageMap;
@@ -1289,16 +1282,12 @@ class _WideWorkspaceState extends State<_WideWorkspace> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(
-          key: const ValueKey('scan-target-rail'),
-          width: _WideWorkspace._targetRailWidth,
-          child: _TargetRail(
+          key: const ValueKey('scan-ai-rail'),
+          width: _WideWorkspace._assistantRailWidth,
+          child: _AiAssistantRail(
             store: widget.store,
             activeTarget: widget.activeTarget,
-            canChangeTarget: widget.canChangeTarget,
-            onPickTarget: widget.onPickTarget,
-            onChooseTarget: widget.onChooseTarget,
-            onPermissionProbe: widget.onPermissionProbe,
-            onPermissionRepair: widget.onPermissionRepair,
+            onScan: widget.onScan,
           ),
         ),
         const _Divider.vertical(),
@@ -1644,13 +1633,21 @@ class _TopBar extends StatelessWidget {
     required this.currentSort,
     required this.queryMode,
     required this.activeTarget,
+    required this.targetChoices,
+    required this.isLoadingTargetChoices,
+    required this.runtimeProof,
     required this.scanActionLabel,
     required this.canSearch,
     required this.canSort,
     required this.canPickTarget,
+    required this.canRepairPermission,
     required this.canScan,
     required this.onScan,
     required this.onPickTarget,
+    required this.onChooseTarget,
+    required this.onChooseFolderTarget,
+    required this.onPermissionProbe,
+    required this.onPermissionRepair,
     required this.onPause,
     required this.canCancelScan,
     required this.onSearchChanged,
@@ -1665,13 +1662,21 @@ class _TopBar extends StatelessWidget {
   final ChildSort currentSort;
   final ScanQueryMode queryMode;
   final ScanTarget activeTarget;
+  final List<ScanTargetChoice> targetChoices;
+  final bool isLoadingTargetChoices;
+  final RuntimeProof runtimeProof;
   final String scanActionLabel;
   final bool canSearch;
   final bool canSort;
   final bool canPickTarget;
+  final bool canRepairPermission;
   final bool canScan;
   final VoidCallback? onScan;
   final VoidCallback onPickTarget;
+  final ValueChanged<ScanTargetChoice> onChooseTarget;
+  final VoidCallback onChooseFolderTarget;
+  final VoidCallback onPermissionProbe;
+  final VoidCallback onPermissionRepair;
   final VoidCallback onPause;
   final bool canCancelScan;
   final ValueChanged<String> onSearchChanged;
@@ -1758,9 +1763,21 @@ class _TopBar extends StatelessWidget {
                 const _WindowChromeInset(compact: false),
                 const _AppTitle(),
                 const SizedBox(width: 18),
-                _Breadcrumb(
-                  target: activeTarget,
-                  onTap: canPickTarget ? onPickTarget : null,
+                _HeaderTargetPicker(
+                  activeTarget: activeTarget,
+                  targetChoices: targetChoices,
+                  isLoadingTargetChoices: isLoadingTargetChoices,
+                  runtimeProof: runtimeProof,
+                  scanActionLabel: scanActionLabel,
+                  canPickTarget: canPickTarget,
+                  canScan: canScan,
+                  canRepairPermission: canRepairPermission,
+                  onPickTarget: onPickTarget,
+                  onChooseTarget: onChooseTarget,
+                  onChooseFolderTarget: onChooseFolderTarget,
+                  onPermissionProbe: onPermissionProbe,
+                  onPermissionRepair: onPermissionRepair,
+                  onScan: onScan,
                 ),
                 const SizedBox(width: 16),
                 _PrimaryActionButton(
@@ -1871,77 +1888,331 @@ class _WideToolbarTrailingActions extends StatelessWidget {
   }
 }
 
-class _TargetRail extends StatelessWidget {
-  const _TargetRail({
+class _AiAssistantRail extends StatelessWidget {
+  const _AiAssistantRail({
     required this.store,
     required this.activeTarget,
-    required this.canChangeTarget,
-    required this.onPickTarget,
-    required this.onChooseTarget,
-    required this.onPermissionProbe,
-    required this.onPermissionRepair,
+    required this.onScan,
   });
 
   final ScanWorkspaceStore store;
   final ScanTarget activeTarget;
-  final bool canChangeTarget;
-  final VoidCallback onPickTarget;
-  final ValueChanged<ScanTargetChoice> onChooseTarget;
-  final VoidCallback onPermissionProbe;
-  final VoidCallback onPermissionRepair;
+  final VoidCallback? onScan;
 
   @override
   Widget build(BuildContext context) {
-    final choices = _railTargetChoices(store.targetChoices, activeTarget);
-    final canChoosePresetTarget =
-        store.sessionStatus?.state != SessionState.running;
+    final l10n = context.cleanDiskL10n;
+    final summary = _metricSummary(store);
+    final selected = store.selectedDetails?.summary;
+    final focusName =
+        selected?.name ??
+        summary.largest?.name ??
+        _targetDisplayName(activeTarget);
+    final focusSize = selected == null
+        ? (summary.largest == null
+              ? (_metricSummarySizeText(store) ?? l10n.metricNoDataValue)
+              : _formatSize(summary.largest!.size))
+        : _formatSize(selected.size);
+    final isRunning = store.sessionStatus?.state == SessionState.running;
+    final statusText = isRunning
+        ? 'Сканирую и собираю кандидатов'
+        : store.hasReadableSnapshot
+        ? 'Готов подсказать по результатам'
+        : 'Запусти скан, потом разберу мусор';
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 18, 14, 14),
-      child: SingleChildScrollView(
-        child: SizedBox(
-          width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: _ScanColors.cyan.withAlpha(18),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome,
+                  color: _ScanColors.cyan,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'AI-помощник',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _titleStyle(context),
+                    ),
+                    Text(
+                      'История очистки и подсказки',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _bodyStyle(
+                        context,
+                      ).copyWith(color: _ScanColors.textSoft),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          _AiFocusSummary(
+            title: focusName,
+            subtitle: focusSize,
+            status: statusText,
+          ),
+          const SizedBox(height: 16),
+          const _SectionCaption('ИСТОРИЯ'),
+          const SizedBox(height: 10),
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                _AiMessageBubble(
+                  author: 'AI',
+                  text:
+                      'Я буду держать историю решений и объяснять, почему файл можно трогать или лучше оставить.',
+                ),
+                const SizedBox(height: 8),
+                const _AiMessageBubble(
+                  author: 'Ты',
+                  text: 'Что занимает место и что безопасно чистить?',
+                  user: true,
+                ),
+                const SizedBox(height: 8),
+                _AiMessageBubble(
+                  author: 'AI',
+                  text: store.hasReadableSnapshot
+                      ? 'Начни с "$focusName". Сначала открывай крупные подпапки, потом добавляй понятные временные файлы в список проверки.'
+                      : 'После скана покажу крупные папки, риск и безопасный следующий шаг.',
+                ),
+                const SizedBox(height: 12),
+                _AiQuickHint(
+                  icon: Icons.rule_folder_outlined,
+                  title: 'Безопасный режим',
+                  text:
+                      'Не удалять корни папок сразу, только через список проверки.',
+                ),
+                const SizedBox(height: 8),
+                _AiQuickHint(
+                  icon: Icons.history,
+                  title: 'Память диалога',
+                  text: 'Здесь поместится длинная переписка по текущему диску.',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            key: const ValueKey('scan-ai-chat-input'),
+            height: 42,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: _ScanColors.input,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.chat_bubble_outline,
+                  color: _ScanColors.cyan,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Спросить про очистку...',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _bodyStyle(
+                      context,
+                    ).copyWith(color: _ScanColors.textSoft),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!store.hasReadableSnapshot && onScan != null) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 38,
+              child: FilledButton.icon(
+                onPressed: onScan,
+                icon: const Icon(Icons.play_arrow, size: 18),
+                label: const Text('Сканировать'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: _ScanColors.cyan,
+                  foregroundColor: _ScanColors.onPrimary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AiFocusSummary extends StatelessWidget {
+  const _AiFocusSummary({
+    required this.title,
+    required this.subtitle,
+    required this.status,
+  });
+
+  final String title;
+  final String subtitle;
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('scan-ai-focus-summary'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: const BoxDecoration(
+        border: Border(
+          top: BorderSide(color: _ScanColors.border),
+          bottom: BorderSide(color: _ScanColors.border),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.saved_search, color: _ScanColors.violet, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _bodyStyle(
+                    context,
+                  ).copyWith(color: Colors.white, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$subtitle - $status',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: _bodyStyle(
+                    context,
+                  ).copyWith(color: _ScanColors.textSoft, height: 1.2),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AiMessageBubble extends StatelessWidget {
+  const _AiMessageBubble({
+    required this.author,
+    required this.text,
+    this.user = false,
+  });
+
+  final String author;
+  final String text;
+  final bool user;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = user ? _ScanColors.blue : _ScanColors.cyan;
+    return Align(
+      alignment: user ? Alignment.centerRight : Alignment.centerLeft,
+      child: FractionallySizedBox(
+        widthFactor: user ? 0.86 : 1,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+          decoration: BoxDecoration(
+            color: user
+                ? _ScanColors.selectedSoft.withAlpha(160)
+                : _ScanColors.innerPanel,
+            borderRadius: BorderRadius.circular(8),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _TargetItem(
-                itemKey: const ValueKey('scan-target-current'),
-                actionKey: const ValueKey('scan-target-picker-action'),
-                icon: Icons.folder_open_outlined,
-                label: _targetDisplayName(activeTarget),
-                size: _metricSummarySizeText(store),
-                selected: true,
-                onTap: canChangeTarget ? onPickTarget : null,
+              Text(
+                author,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: accent,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0,
+                ),
               ),
-              if (choices.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                for (final choice in choices)
-                  _TargetItem(
-                    itemKey: ValueKey('scan-target-choice-${choice.id}'),
-                    actionKey: ValueKey(
-                      'scan-target-choice-action-${choice.id}',
-                    ),
-                    icon: _targetChoiceIcon(choice.kind),
-                    label: _targetChoiceLabel(context.cleanDiskL10n, choice),
-                    selected: false,
-                    onTap: canChoosePresetTarget
-                        ? () => onChooseTarget(choice)
-                        : null,
-                  ),
-              ],
-              const SizedBox(height: 12),
-              _PermissionProofCard(
-                proof: store.runtimeProof,
-                onProbe: onPermissionProbe,
-                onRepair: store.canRepairPermission ? onPermissionRepair : null,
+              const SizedBox(height: 3),
+              Text(
+                text,
+                style: _bodyStyle(
+                  context,
+                ).copyWith(color: _ScanColors.text, height: 1.25),
               ),
-              if (_shouldShowMetricStrip(store)) ...[
-                const SizedBox(height: 12),
-                _DriveSummary(store: store, target: activeTarget),
-              ],
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _AiQuickHint extends StatelessWidget {
+  const _AiQuickHint({
+    required this.icon,
+    required this.title,
+    required this.text,
+  });
+
+  final IconData icon;
+  final String title;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: _ScanColors.textSoft, size: 17),
+        const SizedBox(width: 8),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: _bodyStyle(
+                context,
+              ).copyWith(color: _ScanColors.textSoft, height: 1.22),
+              children: [
+                TextSpan(
+                  text: '$title: ',
+                  style: const TextStyle(
+                    color: _ScanColors.text,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                TextSpan(text: text),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -3457,115 +3728,6 @@ class _MetricCell extends StatelessWidget {
   }
 }
 
-class _TargetItem extends StatefulWidget {
-  const _TargetItem({
-    required this.itemKey,
-    required this.icon,
-    required this.label,
-    this.actionKey,
-    this.size,
-    this.selected = false,
-    this.onTap,
-  });
-
-  final Key itemKey;
-  final Key? actionKey;
-  final IconData icon;
-  final String label;
-  final String? size;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  @override
-  State<_TargetItem> createState() => _TargetItemState();
-}
-
-class _TargetItemState extends State<_TargetItem> {
-  bool _hovered = false;
-
-  void _setHovered(bool value) {
-    if (_hovered == value) {
-      return;
-    }
-    setState(() {
-      _hovered = value;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isInteractive = widget.onTap != null;
-    final backgroundColor = widget.selected
-        ? (_hovered && isInteractive
-              ? _ScanColors.selectedSoft.withValues(alpha: 0.92)
-              : _ScanColors.selectedSoft)
-        : (_hovered && isInteractive
-              ? _ScanColors.selectedSoft.withValues(alpha: 0.52)
-              : Colors.transparent);
-    final borderColor = _hovered && isInteractive
-        ? _ScanColors.cyan.withValues(alpha: 0.58)
-        : _ScanColors.border;
-    final content = Container(
-      key: widget.itemKey,
-      height: 42,
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(8),
-        border: widget.selected || (_hovered && isInteractive)
-            ? Border.all(color: borderColor)
-            : null,
-      ),
-      child: Row(
-        children: [
-          Icon(
-            widget.icon,
-            size: 22,
-            color: widget.selected ? _ScanColors.cyan : Colors.white,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              widget.label,
-              overflow: TextOverflow.ellipsis,
-              style: _bodyStyle(
-                context,
-              ).copyWith(color: Colors.white, fontWeight: FontWeight.w700),
-            ),
-          ),
-          if (widget.size case final size?) ...[
-            const SizedBox(width: 8),
-            Text(size, style: _monoStyle(context)),
-          ],
-        ],
-      ),
-    );
-    if (!isInteractive) {
-      return content;
-    }
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => _setHovered(true),
-      onExit: (_) => _setHovered(false),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          key: widget.actionKey,
-          onTap: widget.onTap,
-          borderRadius: BorderRadius.circular(8),
-          focusColor: _ScanColors.cyan.withValues(alpha: 0.10),
-          highlightColor: _ScanColors.cyan.withValues(alpha: 0.08),
-          hoverColor: Colors.transparent,
-          splashColor: _ScanColors.cyan.withValues(alpha: 0.12),
-          child: content,
-        ),
-      ),
-    );
-  }
-}
-
 class _ChipTarget extends StatefulWidget {
   const _ChipTarget({
     required this.icon,
@@ -3667,63 +3829,6 @@ class _ChipTargetState extends State<_ChipTarget> {
           splashColor: _ScanColors.cyan.withValues(alpha: 0.12),
           child: content,
         ),
-      ),
-    );
-  }
-}
-
-class _DriveSummary extends StatelessWidget {
-  const _DriveSummary({required this.store, required this.target});
-
-  final ScanWorkspaceStore store;
-  final ScanTarget target;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.cleanDiskL10n;
-    final isRunning = store.sessionStatus?.state == SessionState.running;
-    final sizeText =
-        _metricSummarySizeText(store) ??
-        (isRunning ? l10n.metricScanningValue : l10n.metricNoDataValue);
-    return Container(
-      key: const ValueKey('scan-drive-summary'),
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: _panelDecoration,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            _targetDisplayName(target),
-            style: _bodyStyle(context).copyWith(color: Colors.white),
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: LinearProgressIndicator(
-              value: store.hasReadableSnapshot ? 1 : 0,
-              minHeight: 7,
-              backgroundColor: _ScanColors.progressTrack,
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                _ScanColors.violet,
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            sizeText,
-            style: _monoStyle(context).copyWith(color: _ScanColors.textSoft),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            target.path.value,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: _bodyStyle(
-              context,
-            ).copyWith(color: _ScanColors.cyan, fontWeight: FontWeight.w800),
-          ),
-        ],
       ),
     );
   }
@@ -5212,17 +5317,430 @@ class _AppTitle extends StatelessWidget {
   }
 }
 
-class _Breadcrumb extends StatefulWidget {
-  const _Breadcrumb({required this.target, this.onTap});
+class _HeaderTargetPicker extends StatelessWidget {
+  const _HeaderTargetPicker({
+    required this.activeTarget,
+    required this.targetChoices,
+    required this.isLoadingTargetChoices,
+    required this.runtimeProof,
+    required this.scanActionLabel,
+    required this.canPickTarget,
+    required this.canScan,
+    required this.canRepairPermission,
+    required this.onPickTarget,
+    required this.onChooseTarget,
+    required this.onChooseFolderTarget,
+    required this.onPermissionProbe,
+    required this.onPermissionRepair,
+    required this.onScan,
+  });
+
+  final ScanTarget activeTarget;
+  final List<ScanTargetChoice> targetChoices;
+  final bool isLoadingTargetChoices;
+  final RuntimeProof runtimeProof;
+  final String scanActionLabel;
+  final bool canPickTarget;
+  final bool canScan;
+  final bool canRepairPermission;
+  final VoidCallback onPickTarget;
+  final ValueChanged<ScanTargetChoice> onChooseTarget;
+  final VoidCallback onChooseFolderTarget;
+  final VoidCallback onPermissionProbe;
+  final VoidCallback onPermissionRepair;
+  final VoidCallback? onScan;
+
+  @override
+  Widget build(BuildContext context) {
+    return MenuAnchor(
+      alignmentOffset: const Offset(0, 8),
+      style: MenuStyle(
+        backgroundColor: const WidgetStatePropertyAll(_ScanColors.panel),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        side: const WidgetStatePropertyAll(
+          BorderSide(color: _ScanColors.border),
+        ),
+        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+      ),
+      menuChildren: [
+        Builder(
+          builder: (context) {
+            final controller = MenuController.maybeOf(context);
+            return _HeaderTargetMenu(
+              activeTarget: activeTarget,
+              targetChoices: targetChoices,
+              isLoadingTargetChoices: isLoadingTargetChoices,
+              runtimeProof: runtimeProof,
+              scanActionLabel: scanActionLabel,
+              canPickTarget: canPickTarget,
+              canScan: canScan,
+              canRepairPermission: canRepairPermission,
+              onPickTarget: () {
+                controller?.close();
+                onPickTarget();
+              },
+              onChooseTarget: onChooseTarget,
+              onChooseFolderTarget: () {
+                controller?.close();
+                onChooseFolderTarget();
+              },
+              onPermissionProbe: onPermissionProbe,
+              onPermissionRepair: onPermissionRepair,
+              onScan: () {
+                controller?.close();
+                onScan?.call();
+              },
+            );
+          },
+        ),
+      ],
+      builder: (context, controller, child) {
+        return _BreadcrumbButton(
+          target: activeTarget,
+          expanded: controller.isOpen,
+          onTap: () {
+            controller.isOpen ? controller.close() : controller.open();
+          },
+        );
+      },
+    );
+  }
+}
+
+class _HeaderTargetMenu extends StatelessWidget {
+  const _HeaderTargetMenu({
+    required this.activeTarget,
+    required this.targetChoices,
+    required this.isLoadingTargetChoices,
+    required this.runtimeProof,
+    required this.scanActionLabel,
+    required this.canPickTarget,
+    required this.canScan,
+    required this.canRepairPermission,
+    required this.onPickTarget,
+    required this.onChooseTarget,
+    required this.onChooseFolderTarget,
+    required this.onPermissionProbe,
+    required this.onPermissionRepair,
+    required this.onScan,
+  });
+
+  final ScanTarget activeTarget;
+  final List<ScanTargetChoice> targetChoices;
+  final bool isLoadingTargetChoices;
+  final RuntimeProof runtimeProof;
+  final String scanActionLabel;
+  final bool canPickTarget;
+  final bool canScan;
+  final bool canRepairPermission;
+  final VoidCallback onPickTarget;
+  final ValueChanged<ScanTargetChoice> onChooseTarget;
+  final VoidCallback onChooseFolderTarget;
+  final VoidCallback onPermissionProbe;
+  final VoidCallback onPermissionRepair;
+  final VoidCallback onScan;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.cleanDiskL10n;
+    final choices = targetChoices.take(6).toList(growable: false);
+
+    return SizedBox(
+      key: const ValueKey('scan-target-header-menu'),
+      width: 390,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _SectionCaption('ОБЛАСТЬ СКАНИРОВАНИЯ'),
+            const SizedBox(height: 8),
+            _HeaderTargetMenuCurrent(target: activeTarget),
+            const SizedBox(height: 10),
+            if (isLoadingTargetChoices)
+              const LinearProgressIndicator(
+                minHeight: 3,
+                color: _ScanColors.cyan,
+                backgroundColor: _ScanColors.progressTrack,
+              )
+            else
+              for (final choice in choices)
+                _HeaderTargetMenuChoice(
+                  choice: choice,
+                  selected: choice.target.path.value == activeTarget.path.value,
+                  onTap: () => onChooseTarget(choice),
+                ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _FlatMenuAction(
+                    key: const ValueKey('scan-target-menu-pick-folder-action'),
+                    icon: Icons.folder_open_outlined,
+                    label: l10n.targetPickAction,
+                    onTap: canPickTarget ? onChooseFolderTarget : null,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _FlatMenuAction(
+                    key: const ValueKey('scan-target-menu-open-picker-action'),
+                    icon: Icons.tune,
+                    label: 'Другой путь',
+                    onTap: canPickTarget ? onPickTarget : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _HeaderPermissionLine(
+              proof: runtimeProof,
+              onProbe: onPermissionProbe,
+              onRepair: canRepairPermission ? onPermissionRepair : null,
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 40,
+              child: FilledButton.icon(
+                key: const ValueKey('scan-target-menu-scan-action'),
+                onPressed: canScan ? onScan : null,
+                icon: const Icon(Icons.play_arrow, size: 18),
+                label: Text(scanActionLabel),
+                style: FilledButton.styleFrom(
+                  backgroundColor: _ScanColors.cyan,
+                  foregroundColor: _ScanColors.onPrimary,
+                  disabledBackgroundColor: _ScanColors.input,
+                  disabledForegroundColor: _ScanColors.textSoft,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderTargetMenuCurrent extends StatelessWidget {
+  const _HeaderTargetMenuCurrent({required this.target});
 
   final ScanTarget target;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('scan-target-menu-current'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: _ScanColors.input,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.folder_open_outlined,
+            color: _ScanColors.cyan,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              target.path.value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _monoStyle(context).copyWith(color: _ScanColors.text),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeaderTargetMenuChoice extends StatelessWidget {
+  const _HeaderTargetMenuChoice({
+    required this.choice,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final ScanTargetChoice choice;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.cleanDiskL10n;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: ValueKey('scan-target-menu-choice-${choice.id}'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          height: 38,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: selected ? _ScanColors.selectedSoft : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                _targetChoiceIcon(choice.kind),
+                color: selected ? _ScanColors.cyan : _ScanColors.textSoft,
+                size: 17,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _targetChoiceLabel(l10n, choice),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _bodyStyle(context).copyWith(
+                    color: selected ? _ScanColors.cyan : _ScanColors.text,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                  ),
+                ),
+              ),
+              Text(
+                choice.target.path.value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _monoStyle(
+                  context,
+                ).copyWith(color: _ScanColors.textSoft, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FlatMenuAction extends StatelessWidget {
+  const _FlatMenuAction({
+    super.key,
+    required this.icon,
+    required this.label,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
   final VoidCallback? onTap;
 
   @override
-  State<_Breadcrumb> createState() => _BreadcrumbState();
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 34,
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 16),
+        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: _ScanColors.cyan,
+          disabledForegroundColor: _ScanColors.textSoft.withAlpha(120),
+          side: const BorderSide(color: _ScanColors.border),
+          padding: const EdgeInsets.symmetric(horizontal: 9),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      ),
+    );
+  }
 }
 
-class _BreadcrumbState extends State<_Breadcrumb> {
+class _HeaderPermissionLine extends StatelessWidget {
+  const _HeaderPermissionLine({
+    required this.proof,
+    required this.onProbe,
+    this.onRepair,
+  });
+
+  final RuntimeProof proof;
+  final VoidCallback onProbe;
+  final VoidCallback? onRepair;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.cleanDiskL10n;
+    final probe = proof.permissionProbe.status;
+    final color = _permissionProbeColor(probe);
+    final text = _permissionProbeText(l10n, probe);
+
+    return Container(
+      key: const ValueKey('scan-target-menu-permission-line'),
+      height: 36,
+      decoration: const BoxDecoration(
+        border: Border(
+          top: BorderSide(color: _ScanColors.border),
+          bottom: BorderSide(color: _ScanColors.border),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.verified_user_outlined, color: color, size: 17),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${l10n.permissionProofTitle}: $text',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _bodyStyle(context).copyWith(color: _ScanColors.textSoft),
+            ),
+          ),
+          IconButton(
+            onPressed: onProbe,
+            tooltip: l10n.permissionProbeAction,
+            icon: const Icon(Icons.refresh, size: 16),
+            color: _ScanColors.cyan,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+          ),
+          if (onRepair != null)
+            IconButton(
+              key: const ValueKey('permission-repair-action'),
+              onPressed: onRepair,
+              tooltip: _permissionActionText(l10n, proof),
+              icon: const Icon(Icons.settings_suggest_outlined, size: 16),
+              color: _ScanColors.yellow,
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BreadcrumbButton extends StatefulWidget {
+  const _BreadcrumbButton({
+    required this.target,
+    required this.expanded,
+    this.onTap,
+  });
+
+  final ScanTarget target;
+  final bool expanded;
+  final VoidCallback? onTap;
+
+  @override
+  State<_BreadcrumbButton> createState() => _BreadcrumbButtonState();
+}
+
+class _BreadcrumbButtonState extends State<_BreadcrumbButton> {
   bool _hovered = false;
 
   void _setHovered(bool value) {
@@ -5247,7 +5765,9 @@ class _BreadcrumbState extends State<_Breadcrumb> {
             ? _ScanColors.selectedSoft.withValues(alpha: 0.56)
             : _ScanColors.input,
         border: Border.all(
-          color: _hovered && isInteractive
+          color: widget.expanded
+              ? _ScanColors.cyan
+              : _hovered && isInteractive
               ? _ScanColors.cyan.withValues(alpha: 0.72)
               : _ScanColors.border,
         ),
@@ -5269,6 +5789,14 @@ class _BreadcrumbState extends State<_Breadcrumb> {
                 overflow: TextOverflow.ellipsis,
                 style: _bodyStyle(context).copyWith(color: _ScanColors.text),
               ),
+            ),
+            const SizedBox(width: 6),
+            Icon(
+              widget.expanded
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.keyboard_arrow_down_rounded,
+              color: _ScanColors.textSoft,
+              size: 18,
             ),
           ],
         ),
@@ -5892,16 +6420,6 @@ String _targetChoiceLabel(
     ScanTargetChoiceKind.volume =>
       choice.displayName.isEmpty ? l10n.targetVolume : choice.displayName,
   };
-}
-
-List<ScanTargetChoice> _railTargetChoices(
-  List<ScanTargetChoice> choices,
-  ScanTarget activeTarget,
-) {
-  return choices
-      .where((choice) => choice.target.path.value != activeTarget.path.value)
-      .take(6)
-      .toList(growable: false);
 }
 
 IconData _targetChoiceIcon(ScanTargetChoiceKind kind) {
