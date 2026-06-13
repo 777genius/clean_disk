@@ -3,8 +3,8 @@ use fs_usage_core::{
     ScanSessionId, ScanTarget, SupportLevel, TargetPath, TargetScope,
 };
 use fs_usage_engine::{
-    CancellationToken, ChildrenPageQuery, EventSink, ScanEvent, ScanFailure, ScanSession,
-    ScanState, SearchQuery, TopItemsKind, TopItemsQuery, VecEventSink, scan::BackendScanRequest,
+    CancellationToken, EventSink, ScanEvent, ScanFailure, ScanSession, ScanState, SearchQuery,
+    TopItemsKind, TopItemsQuery, VecEventSink, scan::BackendScanRequest,
 };
 use fs_usage_pdu::PduScannerBackend;
 use std::{
@@ -12,6 +12,12 @@ use std::{
     path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
+
+#[cfg(any(unix, windows))]
+use fs_usage_engine::{ChildSort, ChildrenPageQuery, NodeDetailsQuery};
+
+#[cfg(windows)]
+use fs_usage_engine::QueryFailure;
 
 #[cfg(unix)]
 use std::os::unix::fs::{PermissionsExt, symlink};
@@ -101,6 +107,30 @@ fn request_with_policy(
         )],
         measurement,
     )
+}
+
+#[cfg(windows)]
+fn completed_windows_session(
+    session_id_value: u128,
+    backend: &PduScannerBackend,
+    target: PathBuf,
+) -> ScanSession {
+    let session_id = ScanSessionId::new(session_id_value).expect("session id");
+    let cancellation = CancellationToken::new();
+    let mut events = VecEventSink::default();
+    let mut session = ScanSession::new(session_id);
+
+    session
+        .start(
+            backend,
+            request(session_id, target),
+            &mut events,
+            &cancellation,
+        )
+        .expect("pdu windows scan succeeds");
+
+    assert_eq!(session.state(), &ScanState::Completed);
+    session
 }
 
 #[test]
@@ -522,6 +552,330 @@ fn discovered_file_count(events: &[ScanEvent]) -> usize {
             _ => 0,
         })
         .sum()
+}
+
+#[cfg(windows)]
+#[test]
+fn pdu_backend_scans_windows_paths_with_spaces_and_backslashes() {
+    let fixture = TempFixture::new("pdu_windows_spaces");
+    let program_dir = fixture.path().join("Program Files");
+    let cache_dir = program_dir.join("Cache Data");
+    fs::create_dir_all(&cache_dir).expect("cache dir");
+    fs::write(cache_dir.join("asset.bin"), [3_u8; 17]).expect("asset file");
+    fs::write(fixture.path().join("root.log"), [4_u8; 5]).expect("root file");
+
+    let session_id = ScanSessionId::new(209).expect("session id");
+    let backend = PduScannerBackend::default();
+    let cancellation = CancellationToken::new();
+    let mut events = VecEventSink::default();
+    let mut session = ScanSession::new(session_id);
+
+    session
+        .start(
+            &backend,
+            request(session_id, fixture.path().clone()),
+            &mut events,
+            &cancellation,
+        )
+        .expect("windows path scan succeeds");
+
+    let snapshot = session.snapshot().expect("snapshot");
+    let root_id = snapshot.root_ids()[0];
+    let children = snapshot
+        .children_page(ChildrenPageQuery::new_sorted(
+            snapshot.snapshot_id(),
+            root_id,
+            None,
+            10,
+            ChildSort::NameAsc,
+        ))
+        .expect("root children");
+    let program = children
+        .items
+        .iter()
+        .find(|item| item.name() == "Program Files")
+        .expect("program files node");
+    let details = snapshot
+        .node_details(NodeDetailsQuery::new(snapshot.snapshot_id(), program.id()))
+        .expect("program details");
+    let source_path = details
+        .source_path()
+        .expect("source path")
+        .to_string_lossy();
+
+    assert!(source_path.contains("Program Files"));
+    assert!(source_path.contains('\\'));
+    assert_eq!(details.child_ids().len(), 1);
+}
+
+#[cfg(windows)]
+#[test]
+fn pdu_backend_windows_search_is_case_insensitive_for_file_names() {
+    let fixture = TempFixture::new("pdu_windows_search");
+    fs::write(fixture.path().join("MixedCASE.Cache"), [5_u8; 11]).expect("mixed case file");
+
+    let session_id = ScanSessionId::new(210).expect("session id");
+    let backend = PduScannerBackend::default();
+    let cancellation = CancellationToken::new();
+    let mut events = VecEventSink::default();
+    let mut session = ScanSession::new(session_id);
+
+    session
+        .start(
+            &backend,
+            request(session_id, fixture.path().clone()),
+            &mut events,
+            &cancellation,
+        )
+        .expect("windows search scan succeeds");
+
+    let snapshot = session.snapshot().expect("snapshot");
+    let lower = snapshot
+        .search_page(SearchQuery::new(
+            snapshot.snapshot_id(),
+            "mixedcase.cache",
+            None,
+            10,
+        ))
+        .expect("lowercase search");
+    let upper = snapshot
+        .search_page(SearchQuery::new(snapshot.snapshot_id(), "CACHE", None, 10))
+        .expect("uppercase search");
+
+    assert_eq!(lower.items.len(), 1);
+    assert_eq!(lower.items[0].name(), "MixedCASE.Cache");
+    assert_eq!(upper.items.len(), 1);
+    assert_eq!(upper.items[0].name(), "MixedCASE.Cache");
+}
+
+#[cfg(windows)]
+#[test]
+fn pdu_backend_windows_sorts_and_paginates_root_children() {
+    let fixture = TempFixture::new("pdu_windows_sort_page");
+    fs::write(fixture.path().join("Zeta.tmp"), [1_u8; 4]).expect("zeta file");
+    fs::write(fixture.path().join("alpha.tmp"), [2_u8; 1]).expect("alpha file");
+    fs::write(fixture.path().join("Beta.tmp"), [3_u8; 2]).expect("beta file");
+    fs::write(fixture.path().join("delta.tmp"), [4_u8; 8]).expect("delta file");
+
+    let backend = PduScannerBackend::default();
+    let session = completed_windows_session(211, &backend, fixture.path().clone());
+    let snapshot = session.snapshot().expect("snapshot");
+    let root_id = snapshot.root_ids()[0];
+
+    let first_name_page = snapshot
+        .children_page(ChildrenPageQuery::new_sorted(
+            snapshot.snapshot_id(),
+            root_id,
+            None,
+            2,
+            ChildSort::NameAsc,
+        ))
+        .expect("first name page");
+    assert_eq!(
+        first_name_page
+            .items
+            .iter()
+            .map(|item| item.name())
+            .collect::<Vec<_>>(),
+        ["alpha.tmp", "Beta.tmp"]
+    );
+
+    let second_name_page = snapshot
+        .children_page(ChildrenPageQuery::new_sorted(
+            snapshot.snapshot_id(),
+            root_id,
+            first_name_page.next_cursor,
+            2,
+            ChildSort::NameAsc,
+        ))
+        .expect("second name page");
+    assert_eq!(
+        second_name_page
+            .items
+            .iter()
+            .map(|item| item.name())
+            .collect::<Vec<_>>(),
+        ["delta.tmp", "Zeta.tmp"]
+    );
+    assert!(second_name_page.next_cursor.is_none());
+
+    let size_desc = snapshot
+        .children_page(ChildrenPageQuery::new_sorted(
+            snapshot.snapshot_id(),
+            root_id,
+            None,
+            4,
+            ChildSort::SizeDesc,
+        ))
+        .expect("size desc page");
+    assert_eq!(
+        size_desc
+            .items
+            .iter()
+            .map(|item| item.name())
+            .collect::<Vec<_>>(),
+        ["delta.tmp", "Zeta.tmp", "Beta.tmp", "alpha.tmp"]
+    );
+
+    let cursor_mismatch = snapshot
+        .children_page(ChildrenPageQuery::new_sorted(
+            snapshot.snapshot_id(),
+            root_id,
+            first_name_page.next_cursor,
+            2,
+            ChildSort::SizeDesc,
+        ))
+        .expect_err("cursor from another sort must be rejected");
+    assert_eq!(cursor_mismatch, QueryFailure::CursorQueryMismatch);
+}
+
+#[cfg(windows)]
+#[test]
+fn pdu_backend_windows_preserves_unicode_file_details_and_top_items() {
+    let fixture = TempFixture::new("pdu_windows_unicode");
+    let cache_dir = fixture.path().join("Cache Data #1");
+    fs::create_dir_all(&cache_dir).expect("cache dir");
+    let unicode_file_name = format!(
+        "unicode-{}.bin",
+        "\u{0434}\u{0430}\u{043d}\u{043d}\u{044b}\u{0435}"
+    );
+    fs::write(cache_dir.join(&unicode_file_name), [9_u8; 31]).expect("unicode file");
+    fs::write(fixture.path().join("small.bin"), [1_u8; 3]).expect("small file");
+
+    let backend = PduScannerBackend::default();
+    let session = completed_windows_session(212, &backend, fixture.path().clone());
+    let snapshot = session.snapshot().expect("snapshot");
+
+    let top_files = snapshot
+        .top_items_page(TopItemsQuery::new(
+            snapshot.snapshot_id(),
+            TopItemsKind::Files,
+            None,
+            5,
+        ))
+        .expect("top files");
+    let top_file = top_files.items.first().expect("top file");
+    assert_eq!(top_file.name(), unicode_file_name);
+    assert_eq!(top_file.kind(), NodeKind::File);
+    assert_eq!(top_file.size().raw_value(), 31);
+
+    let unicode_search = snapshot
+        .search_page(SearchQuery::new(
+            snapshot.snapshot_id(),
+            "\u{0434}\u{0430}\u{043d}",
+            None,
+            10,
+        ))
+        .expect("unicode search");
+    assert_eq!(unicode_search.items.len(), 1);
+    assert_eq!(unicode_search.items[0].name(), unicode_file_name);
+
+    let details = snapshot
+        .node_details(NodeDetailsQuery::new(
+            snapshot.snapshot_id(),
+            unicode_search.items[0].id(),
+        ))
+        .expect("unicode file details");
+    let source_path = details
+        .source_path()
+        .expect("source path")
+        .to_string_lossy();
+    assert!(source_path.contains("Cache Data #1"));
+    assert!(source_path.contains(&unicode_file_name));
+    assert!(source_path.contains('\\'));
+    assert_eq!(details.summary().kind(), NodeKind::File);
+    assert_eq!(details.summary().child_count(), 0);
+    assert!(details.child_ids().is_empty());
+}
+
+#[cfg(windows)]
+#[test]
+fn pdu_backend_windows_depth_limit_collapses_nested_branch() {
+    let fixture = TempFixture::new("pdu_windows_depth");
+    let level_one = fixture.path().join("Level One");
+    let level_two = level_one.join("Level Two");
+    fs::create_dir_all(&level_two).expect("nested dir");
+    fs::write(level_two.join("leaf.bin"), [7_u8; 6]).expect("leaf file");
+
+    let backend = PduScannerBackend::new(2);
+    let session = completed_windows_session(213, &backend, fixture.path().clone());
+    let snapshot = session.snapshot().expect("snapshot");
+    let root_id = snapshot.root_ids()[0];
+    let children = snapshot
+        .children_page(ChildrenPageQuery::new_sorted(
+            snapshot.snapshot_id(),
+            root_id,
+            None,
+            10,
+            ChildSort::NameAsc,
+        ))
+        .expect("root children");
+    let collapsed = children
+        .items
+        .iter()
+        .find(|item| item.name() == "Level One")
+        .expect("level one node");
+
+    assert_eq!(collapsed.kind(), NodeKind::Directory);
+    assert_eq!(
+        collapsed.child_completeness(),
+        ChildCompleteness::CollapsedByDepth
+    );
+    assert!(
+        snapshot
+            .issues()
+            .iter()
+            .any(|issue| issue.code() == IssueCode::BackendLimitation)
+    );
+
+    let details = snapshot
+        .node_details(NodeDetailsQuery::new(
+            snapshot.snapshot_id(),
+            collapsed.id(),
+        ))
+        .expect("collapsed details");
+    let source_path = details
+        .source_path()
+        .expect("source path")
+        .to_string_lossy();
+    assert!(source_path.ends_with("Level One"));
+    assert!(source_path.contains('\\'));
+    assert!(details.child_ids().is_empty());
+}
+
+#[cfg(windows)]
+#[test]
+fn pdu_backend_windows_missing_target_records_metadata_evidence() {
+    let fixture = TempFixture::new("pdu_windows_missing");
+    let missing = fixture.path().join("Missing Folder").join("child");
+    let session_id = ScanSessionId::new(214).expect("session id");
+    let backend = PduScannerBackend::default();
+    let cancellation = CancellationToken::new();
+    let mut events = VecEventSink::default();
+    let mut session = ScanSession::new(session_id);
+
+    session
+        .start(
+            &backend,
+            request(session_id, missing.clone()),
+            &mut events,
+            &cancellation,
+        )
+        .expect("missing windows target degrades into snapshot");
+
+    let snapshot = session.snapshot().expect("snapshot");
+    let issue = snapshot
+        .issues()
+        .iter()
+        .find(|issue| issue.code() == IssueCode::MetadataUnavailable)
+        .expect("metadata issue");
+    let evidence = issue.evidence();
+    let evidence_path = evidence.path().expect("issue path");
+    assert!(evidence_path.contains("Missing Folder"));
+    assert!(evidence_path.contains('\\'));
+    assert!(evidence.operation().is_some());
+    assert!(evidence.message().is_some());
+    assert_eq!(session.state(), &ScanState::Completed);
 }
 
 #[cfg(unix)]
