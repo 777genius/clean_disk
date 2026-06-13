@@ -2894,7 +2894,13 @@ class _CollapsedDetailsRail extends StatelessWidget {
             onTap: onExpand,
           ),
           const SizedBox(height: 8),
-          const Icon(Icons.info_outline, color: _ScanColors.violet, size: 20),
+          _PaneToggleAction(
+            buttonKey: const ValueKey('details-pane-info-action'),
+            icon: Icons.info_outline,
+            iconColor: _ScanColors.violet,
+            tooltip: l10n.detailsTitle,
+            onTap: onExpand,
+          ),
         ],
       ),
     );
@@ -5073,12 +5079,14 @@ class _PaneToggleAction extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.onTap,
+    this.iconColor = Colors.white,
   });
 
   final Key buttonKey;
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
+  final Color iconColor;
 
   @override
   Widget build(BuildContext context) {
@@ -5099,7 +5107,7 @@ class _PaneToggleAction extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: _ScanColors.border),
             ),
-            child: Icon(icon, size: 20, color: Colors.white),
+            child: Icon(icon, size: 20, color: iconColor),
           ),
         ),
       ),

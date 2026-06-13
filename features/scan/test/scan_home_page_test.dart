@@ -1639,6 +1639,24 @@ void main() {
       find.byKey(const ValueKey('details-pane-expand-action')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const ValueKey('details-pane-info-action')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('details-pane-info-action')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('details-reveal-action')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('details-pane-collapsed-rail')),
+      findsNothing,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('details-pane-collapse-action')),
+    );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('details-pane-expand-action')));
     await tester.pumpAndSettle();
