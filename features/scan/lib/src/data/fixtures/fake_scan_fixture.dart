@@ -120,6 +120,7 @@ final class FakeScanRepository implements ScanRepository {
   ScanSessionStatus? _status;
   StartScanCommand? lastStartCommand;
   bool deferStartCompletion = false;
+  bool emitStartScanEvents = true;
   DaemonCapabilities capabilities = _defaultCapabilities;
   PermissionProbe permissionProbe = _defaultPermissionProbe;
   final List<ScanTarget> permissionProbeTargets = [];
@@ -190,28 +191,31 @@ final class FakeScanRepository implements ScanRepository {
       rootNodeIds: [_currentRootNodeId],
       progress: progress,
     );
-    _status = completed;
-
-    _emit(ScanStarted(sessionId: _currentSessionId));
-    _emitGrowingTreeBatch();
-    _emit(ScanProgressed(sessionId: _currentSessionId, progress: progress));
-    _emit(
-      ScanSnapshotPublished(
-        sessionId: _currentSessionId,
-        snapshotId: _currentSnapshotId,
-      ),
+    final running = ScanSessionStatus(
+      sessionId: _currentSessionId,
+      state: SessionState.running,
+      snapshotId: null,
+      rootNodeIds: [_currentRootNodeId],
+      progress: null,
     );
+    _status = deferStartCompletion && !emitStartScanEvents
+        ? running
+        : completed;
 
-    if (deferStartCompletion) {
-      return Result.success(
-        ScanSessionStatus(
+    if (emitStartScanEvents) {
+      _emit(ScanStarted(sessionId: _currentSessionId));
+      _emitGrowingTreeBatch();
+      _emit(ScanProgressed(sessionId: _currentSessionId, progress: progress));
+      _emit(
+        ScanSnapshotPublished(
           sessionId: _currentSessionId,
-          state: SessionState.running,
-          snapshotId: null,
-          rootNodeIds: [_currentRootNodeId],
-          progress: null,
+          snapshotId: _currentSnapshotId,
         ),
       );
+    }
+
+    if (deferStartCompletion) {
+      return Result.success(running);
     }
 
     return Result.success(completed);

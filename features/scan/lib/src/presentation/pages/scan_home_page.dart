@@ -1979,24 +1979,33 @@ class _MetricStrip extends StatelessWidget {
     final summary = _metricSummary(store);
     final largest = summary.largest;
     final scannedItems = store.progress?.scannedItems;
+    final isRunning = store.sessionStatus?.state == SessionState.running;
+    final totalValue = summary.totalSize == null
+        ? (isRunning ? l10n.metricScanningValue : l10n.metricNoDataValue)
+        : _formatBytes(summary.totalSize!);
+    final totalSubtitle = scannedItems == null
+        ? (isRunning ? l10n.metricScanningSubtitle : l10n.metricNoDataValue)
+        : '$scannedItems ${l10n.filesCountSuffix}';
+    final largestValue =
+        largest?.name ??
+        (isRunning ? l10n.metricScanningValue : l10n.metricNoDataValue);
+    final largestSubtitle = largest == null
+        ? (isRunning
+              ? l10n.metricScanningLargestSubtitle
+              : l10n.metricRunScanSubtitle)
+        : _formatSize(largest.size);
     final cells = [
       _MetricCell(
         label: l10n.totalScannedLabel,
-        value: summary.totalSize == null
-            ? l10n.metricNoDataValue
-            : _formatBytes(summary.totalSize!),
-        subtitle: scannedItems == null
-            ? l10n.metricNoDataValue
-            : '$scannedItems ${l10n.filesCountSuffix}',
+        value: totalValue,
+        subtitle: totalSubtitle,
         accent: _ScanColors.blue,
         icon: Icons.storage_outlined,
       ),
       _MetricCell(
         label: l10n.largestFolderLabel,
-        value: largest?.name ?? l10n.metricNoDataValue,
-        subtitle: largest == null
-            ? l10n.metricRunScanSubtitle
-            : _formatSize(largest.size),
+        value: largestValue,
+        subtitle: largestSubtitle,
         accent: _ScanColors.violet,
         icon: Icons.folder,
       ),
@@ -2815,23 +2824,33 @@ class _ScanFooterState extends State<_ScanFooter>
                             Expanded(
                               child: _FooterStat(
                                 label: l10n.progressFilesScannedLabel,
-                                value: _progressItemsText(l10n, progress),
+                                value: _progressItemsText(
+                                  l10n,
+                                  progress,
+                                  isRunning: running,
+                                ),
                                 compact: true,
                               ),
                             ),
                             Expanded(
                               child: _FooterStat(
                                 label: l10n.progressElapsedLabel,
-                                value: progress?.elapsedMs == null
-                                    ? l10n.metricNoDataValue
-                                    : _formatElapsed(progress!.elapsedMs!),
+                                value: _progressElapsedText(
+                                  l10n,
+                                  progress,
+                                  isRunning: running,
+                                ),
                                 compact: true,
                               ),
                             ),
                             Expanded(
                               child: _FooterStat(
                                 label: l10n.progressThroughputLabel,
-                                value: _progressThroughputText(l10n, progress),
+                                value: _progressThroughputText(
+                                  l10n,
+                                  progress,
+                                  isRunning: running,
+                                ),
                                 compact: true,
                               ),
                             ),
@@ -2881,17 +2900,27 @@ class _ScanFooterState extends State<_ScanFooter>
                         ],
                         _FooterStat(
                           label: l10n.progressFilesScannedLabel,
-                          value: _progressItemsText(l10n, progress),
+                          value: _progressItemsText(
+                            l10n,
+                            progress,
+                            isRunning: running,
+                          ),
                         ),
                         _FooterStat(
                           label: l10n.progressElapsedLabel,
-                          value: progress?.elapsedMs == null
-                              ? l10n.metricNoDataValue
-                              : _formatElapsed(progress!.elapsedMs!),
+                          value: _progressElapsedText(
+                            l10n,
+                            progress,
+                            isRunning: running,
+                          ),
                         ),
                         _FooterStat(
                           label: l10n.progressThroughputLabel,
-                          value: _progressThroughputText(l10n, progress),
+                          value: _progressThroughputText(
+                            l10n,
+                            progress,
+                            isRunning: running,
+                          ),
                         ),
                       ],
                     ),
@@ -3651,6 +3680,11 @@ class _DriveSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.cleanDiskL10n;
+    final isRunning = store.sessionStatus?.state == SessionState.running;
+    final sizeText =
+        _metricSummarySizeText(store) ??
+        (isRunning ? l10n.metricScanningValue : l10n.metricNoDataValue);
     return Container(
       key: const ValueKey('scan-drive-summary'),
       width: double.infinity,
@@ -3677,8 +3711,7 @@ class _DriveSummary extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            _metricSummarySizeText(store) ??
-                context.cleanDiskL10n.metricNoDataValue,
+            sizeText,
             style: _monoStyle(context).copyWith(color: _ScanColors.textSoft),
           ),
           const SizedBox(height: 4),
@@ -5784,20 +5817,37 @@ String _formatSize(SizeFact size) {
   return _formatBytes(size.byteEquivalentBigInt ?? size.rawBigInt);
 }
 
-String _progressItemsText(CleanDiskLocalizations l10n, ScanProgress? progress) {
+String _progressItemsText(
+  CleanDiskLocalizations l10n,
+  ScanProgress? progress, {
+  required bool isRunning,
+}) {
   final scannedItems = progress?.scannedItems;
   if (scannedItems == null) {
-    return l10n.metricNoDataValue;
+    return isRunning ? l10n.metricScanningValue : l10n.metricNoDataValue;
   }
   return scannedItems.toString();
 }
 
+String _progressElapsedText(
+  CleanDiskLocalizations l10n,
+  ScanProgress? progress, {
+  required bool isRunning,
+}) {
+  final elapsedMs = progress?.elapsedMs;
+  if (elapsedMs == null) {
+    return isRunning ? l10n.metricScanningValue : l10n.metricNoDataValue;
+  }
+  return _formatElapsed(elapsedMs);
+}
+
 String _progressThroughputText(
   CleanDiskLocalizations l10n,
-  ScanProgress? progress,
-) {
+  ScanProgress? progress, {
+  required bool isRunning,
+}) {
   if (progress == null) {
-    return l10n.metricNoDataValue;
+    return isRunning ? l10n.metricScanningValue : l10n.metricNoDataValue;
   }
   final bytesPerSecond = progress.throughputBytesPerSec;
   if (bytesPerSecond != null) {
@@ -5806,13 +5856,13 @@ String _progressThroughputText(
 
   final elapsedMs = progress.elapsedMs;
   if (elapsedMs == null || elapsedMs <= BigInt.zero) {
-    return l10n.metricNoDataValue;
+    return isRunning ? l10n.metricScanningValue : l10n.metricNoDataValue;
   }
 
   final itemsPerSecond =
       progress.scannedItems.toDouble() / (elapsedMs.toDouble() / 1000);
   if (!itemsPerSecond.isFinite || itemsPerSecond <= 0) {
-    return l10n.metricNoDataValue;
+    return isRunning ? l10n.metricScanningValue : l10n.metricNoDataValue;
   }
 
   return '${_formatRate(itemsPerSecond)} ${l10n.progressItemsPerSecondSuffix}';

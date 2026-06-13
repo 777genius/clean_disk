@@ -72,6 +72,48 @@ void main() {
     expect(selectedId, '1');
   });
 
+  testWidgets('keeps loading indicator from overlapping size text', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark(),
+        home: const Scaffold(
+          body: SizedBox(
+            width: 420,
+            height: 140,
+            child: AppTreeTable(
+              columns: columns,
+              rows: [
+                AppTreeTableRow(
+                  id: '1',
+                  name: r'C:\',
+                  sizeText: '471.5 GB',
+                  percentText: '100%',
+                  itemsText: '12',
+                  progress: 1,
+                  depth: 0,
+                  selected: false,
+                  hasChildren: true,
+                  expanded: true,
+                  icon: Icons.folder_outlined,
+                  loading: true,
+                ),
+              ],
+              emptyState: Text('Empty'),
+              style: style,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final loaderRect = tester.getRect(find.byType(CircularProgressIndicator));
+    final sizeRect = tester.getRect(find.text('471.5 GB'));
+
+    expect(loaderRect.right, lessThanOrEqualTo(sizeRect.left));
+  });
+
   testWidgets('can hide header for empty first-run states', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

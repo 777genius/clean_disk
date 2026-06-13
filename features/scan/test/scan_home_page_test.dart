@@ -330,6 +330,43 @@ void main() {
     expect(find.text('1.0k items/s'), findsOneWidget);
   });
 
+  testWidgets('metric strip shows scanning copy while totals are pending', (
+    tester,
+  ) async {
+    final repository = FakeScanRepository()
+      ..deferStartCompletion = true
+      ..emitStartScanEvents = false;
+    final fixture = FakeScanFeatureFixture(repository: repository);
+    final result = await _pumpScanHome(
+      tester,
+      fixture: fixture,
+      size: const Size(1440, 900),
+    );
+    await result.store.start(_scanCommand());
+    await tester.pump();
+
+    result.fixture.eventClient.add(
+      ScanEventEnvelope(
+        protocolVersion: ProtocolVersion.current,
+        sequence: EventSequence('2'),
+        emittedAtUnixMs: BigInt.from(1700000000002),
+        event: ScanProgressed(
+          sessionId: FakeScanRepository.sessionId,
+          progress: ScanProgress(scannedItems: BigInt.from(208214)),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(result.store.sessionStatus?.state, SessionState.running);
+    expect(find.text('TOTAL SCANNED'), findsOneWidget);
+    expect(find.text('LARGEST FOLDER'), findsOneWidget);
+    expect(find.text('Scanning'), findsNWidgets(5));
+    expect(find.text('208214 files'), findsOneWidget);
+    expect(find.text('Finding largest folders'), findsOneWidget);
+    expect(find.text('Run a scan'), findsNothing);
+  });
+
   testWidgets('renders growing tree rows without selecting cleanup authority', (
     tester,
   ) async {

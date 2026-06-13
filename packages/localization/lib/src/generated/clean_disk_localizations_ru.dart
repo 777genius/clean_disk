@@ -484,6 +484,15 @@ class CleanDiskLocalizationsRu extends CleanDiskLocalizations {
   String get metricNoDataValue => 'Нет данных';
 
   @override
+  String get metricScanningValue => 'В процессе';
+
+  @override
+  String get metricScanningSubtitle => 'Собираем файлы';
+
+  @override
+  String get metricScanningLargestSubtitle => 'Ищем крупные папки';
+
+  @override
   String get metricRunScanSubtitle => 'После скана';
 
   @override
