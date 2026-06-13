@@ -909,6 +909,43 @@ void main() {
     expect(find.byKey(const ValueKey('app-tree-table-row-2')), findsOneWidget);
   });
 
+  testWidgets('target menu scan action shows feedback when run again', (
+    tester,
+  ) async {
+    final result = await _pumpScanHome(tester, size: const Size(1440, 900));
+
+    await _tapScanAction(tester);
+    await tester.pumpAndSettle();
+
+    final firstSessionId = result.store.sessionId;
+
+    await _openTargetMenu(tester);
+    await tester.tap(
+      find.byKey(const ValueKey('scan-target-menu-scan-action')),
+    );
+    await tester.pump();
+
+    expect(find.text('Scanning...'), findsWidgets);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.descendant(
+              of: find.byKey(const ValueKey('scan-toolbar-scan-action')),
+              matching: find.byType(FilledButton),
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    await tester.pump(const Duration(milliseconds: 1300));
+    await tester.pumpAndSettle();
+
+    expect(result.store.sessionId, isNot(firstSessionId));
+    expect(result.store.sessionId, ScanSessionId('2'));
+    expect(find.text('Scan again'), findsOneWidget);
+  });
+
   testWidgets('configured home target starts tree at target children', (
     tester,
   ) async {
@@ -2025,9 +2062,11 @@ Future<void> _tapScanAction(WidgetTester tester) async {
   final keyedAction = find.byKey(const ValueKey('scan-toolbar-scan-action'));
   if (keyedAction.evaluate().isNotEmpty) {
     await tester.tap(keyedAction.first);
+    await tester.pump(const Duration(milliseconds: 1300));
     return;
   }
   await tester.tap(find.byTooltip('Scan'));
+  await tester.pump(const Duration(milliseconds: 1300));
 }
 
 Future<void> _openTargetMenu(WidgetTester tester) async {

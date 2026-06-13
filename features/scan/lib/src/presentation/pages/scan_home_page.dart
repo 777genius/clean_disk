@@ -45,8 +45,10 @@ class _ScanHomePageState extends State<ScanHomePage> {
   var _detailsPaneCollapsed = false;
   var _diskUsageMapCollapsed = false;
   var _uiRefreshScheduled = false;
+  var _scanFeedbackActive = false;
   var _searchSequence = 0;
   var _lastSubmittedSearchText = '';
+  Timer? _scanFeedbackTimer;
 
   @override
   void initState() {
@@ -65,6 +67,7 @@ class _ScanHomePageState extends State<ScanHomePage> {
   @override
   void dispose() {
     _searchDebounceTimer?.cancel();
+    _scanFeedbackTimer?.cancel();
     _stopPendingSnapshotLoadPolling();
     _searchFocusNode.dispose();
     _searchController.dispose();
@@ -101,6 +104,7 @@ class _ScanHomePageState extends State<ScanHomePage> {
           searchController: _searchController,
           searchFocusNode: _searchFocusNode,
           canScan: _canRunScan,
+          scanFeedbackActive: _scanFeedbackActive,
           showTargetChooser: _targetChooserVisible,
           detailsPaneCollapsed: _detailsPaneCollapsed,
           diskUsageMapRenderer: widget.diskUsageMapRenderer,
@@ -149,6 +153,9 @@ class _ScanHomePageState extends State<ScanHomePage> {
   }
 
   bool get _canRunScan {
+    if (_scanFeedbackActive) {
+      return false;
+    }
     if (widget.store.sessionStatus?.state == SessionState.running) {
       return false;
     }
@@ -197,6 +204,7 @@ class _ScanHomePageState extends State<ScanHomePage> {
     }
 
     _commandSequence += 1;
+    _beginScanFeedback();
     _resetSearchState();
     _lastAutoLoadedSessionId = null;
     _lastAutoLoadedSnapshotId = null;
@@ -210,6 +218,21 @@ class _ScanHomePageState extends State<ScanHomePage> {
     _markStoreChanged();
     _pendingSnapshotLoadSessionId = store.sessionId;
     _schedulePendingSnapshotLoad(store);
+  }
+
+  void _beginScanFeedback() {
+    _scanFeedbackTimer?.cancel();
+    setState(() {
+      _scanFeedbackActive = true;
+    });
+    _scanFeedbackTimer = Timer(const Duration(milliseconds: 1200), () {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _scanFeedbackActive = false;
+      });
+    });
   }
 
   Future<void> _loadPendingSnapshotRows(ScanWorkspaceStore store) async {
@@ -808,6 +831,7 @@ class ScanWorkspaceView extends StatelessWidget {
     required this.searchController,
     required this.searchFocusNode,
     required this.canScan,
+    required this.scanFeedbackActive,
     required this.showTargetChooser,
     required this.detailsPaneCollapsed,
     required this.diskUsageMapCollapsed,
@@ -837,6 +861,7 @@ class ScanWorkspaceView extends StatelessWidget {
   final TextEditingController searchController;
   final FocusNode searchFocusNode;
   final bool canScan;
+  final bool scanFeedbackActive;
   final bool showTargetChooser;
   final bool detailsPaneCollapsed;
   final bool diskUsageMapCollapsed;
@@ -862,7 +887,7 @@ class ScanWorkspaceView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.cleanDiskL10n;
-    final scanActionLabel = _scanActionLabel(l10n, store);
+    final scanActionLabel = _scanActionLabel(l10n, store, scanFeedbackActive);
 
     return AppScaffold(
       body: Stack(
@@ -876,7 +901,7 @@ class ScanWorkspaceView extends StatelessWidget {
                   children: [
                     _TopBar(
                       compact: compact,
-                      statusText: _statusText(l10n, store),
+                      statusText: _statusText(l10n, store, scanFeedbackActive),
                       searchController: searchController,
                       searchFocusNode: searchFocusNode,
                       currentSort: store.viewport.sort,
@@ -958,7 +983,14 @@ class ScanWorkspaceView extends StatelessWidget {
     );
   }
 
-  String _statusText(CleanDiskLocalizations l10n, ScanWorkspaceStore store) {
+  String _statusText(
+    CleanDiskLocalizations l10n,
+    ScanWorkspaceStore store,
+    bool scanFeedbackActive,
+  ) {
+    if (scanFeedbackActive) {
+      return l10n.scanRunningStatus;
+    }
     return switch (store.daemonAvailability) {
       ScanDaemonAvailability.offline => l10n.scanOfflineStatus,
       ScanDaemonAvailability.incompatible => l10n.scanIncompatibleStatus,
@@ -973,7 +1005,11 @@ class ScanWorkspaceView extends StatelessWidget {
   String _scanActionLabel(
     CleanDiskLocalizations l10n,
     ScanWorkspaceStore store,
+    bool scanFeedbackActive,
   ) {
+    if (scanFeedbackActive) {
+      return l10n.scanRunningStatus;
+    }
     return switch (store.sessionStatus?.state) {
       SessionState.running => l10n.scanRunningStatus,
       SessionState.completed => l10n.scanAgainAction,
@@ -5399,8 +5435,8 @@ class _HeaderTargetPicker extends StatelessWidget {
               onPermissionProbe: onPermissionProbe,
               onPermissionRepair: onPermissionRepair,
               onScan: () {
-                controller?.close();
                 onScan?.call();
+                controller?.close();
               },
             );
           },
