@@ -115,6 +115,10 @@ Map<String, String>? _eventHeaders(String? localAuthToken) {
 }
 
 String? _normalizedAuthToken() {
-  final token = _localAuthToken.trim();
+  final token =
+      (_localAuthToken.trim().isNotEmpty
+              ? _localAuthToken
+              : Platform.environment['CLEAN_DISK_LOCAL_AUTH_TOKEN'] ?? '')
+          .trim();
   return token.isEmpty ? null : token;
 }

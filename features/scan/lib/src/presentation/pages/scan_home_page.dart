@@ -3396,24 +3396,28 @@ class _MetricCell extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _SectionCaption(label.toUpperCase()),
-                const SizedBox(height: 3),
+                const SizedBox(height: 1),
                 Text(
                   value,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: accent,
-                    fontSize: 15,
+                    fontSize: 14,
                     fontWeight: FontWeight.w800,
+                    height: 1.25,
                     letterSpacing: 0,
                   ),
                 ),
-                const SizedBox(height: 1),
                 Text(
                   subtitle,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: _bodyStyle(
-                    context,
-                  ).copyWith(color: _ScanColors.textSoft, fontSize: 12),
+                  style: _bodyStyle(context).copyWith(
+                    color: _ScanColors.textSoft,
+                    fontSize: 11,
+                    height: 1.2,
+                  ),
                 ),
               ],
             ),

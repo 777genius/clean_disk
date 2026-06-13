@@ -7,7 +7,7 @@ void main() {
     final importsByFile = _collectImportsByFile('lib');
 
     for (final entry in importsByFile.entries) {
-      final path = entry.key;
+      final path = _normalizePath(entry.key);
       final imports = entry.value;
       final isDiFile = path.contains('/src/di/');
       final isPresentationFile = path.contains('/src/presentation/');
@@ -61,10 +61,9 @@ void main() {
   });
 
   test('scan feature keeps daemon route strings inside data sources', () {
-    final routeLeaks = _collectFilesContaining(
-      'lib',
-      '/v1/',
-    ).where((path) => !path.contains('/src/data/sources/')).toList();
+    final routeLeaks = _collectFilesContaining('lib', '/v1/').where((path) {
+      return !_normalizePath(path).contains('/src/data/sources/');
+    }).toList();
 
     expect(routeLeaks, isEmpty);
   });
@@ -169,4 +168,8 @@ String? _extractImportUri(String line) {
   }
 
   return line.substring(firstQuote + 1, secondQuote);
+}
+
+String _normalizePath(String path) {
+  return path.replaceAll(r'\', '/');
 }

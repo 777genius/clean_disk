@@ -10,9 +10,10 @@ use clean_disk_protocol::{
     NodeDetailsRequestDto, NodeDetailsResponseDto, NodePageResponseDto, OpaqueCursorDto,
     PROTOCOL_VERSION, PackageModeDto, PermissionProbeDto, PermissionProbeRequestDto,
     PermissionProbeStatusDto, PermissionRequiredActionDto, ProtocolVersionDto, RawPathDto,
-    ScanModeDto, ScanSessionStatusDto, ScanTargetDto, ScannerIdentityVerificationDto,
-    SearchPageRequestDto, SearchTextDto, SessionStateDto, StartScanRequestDto, SupportLevelDto,
-    TargetScopeDto, TopItemsKindDto, TopItemsRequestDto,
+    RuntimePlatformDto, ScanModeDto, ScanSessionStatusDto, ScanTargetDto,
+    ScannerIdentityVerificationDto, ScannerProcessKindDto, SearchPageRequestDto, SearchTextDto,
+    SessionStateDto, StartScanRequestDto, SupportLevelDto, TargetScopeDto, TopItemsKindDto,
+    TopItemsRequestDto,
 };
 use clean_disk_server::{AppState, ServerConfig, build_router};
 use fs_usage_engine::{FakeScannerBackend, ScanResourceProfile, WorkerBudget};
@@ -186,6 +187,38 @@ async fn capability_endpoint_reports_unverified_runtime_proof_until_probe_runs()
     );
 }
 
+#[cfg(windows)]
+#[tokio::test]
+async fn capability_endpoint_reports_windows_runtime_contract() {
+    let app = build_router(test_state());
+
+    let response = app
+        .oneshot(authorized_request("GET", "/v1/capabilities", Body::empty()))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let capabilities: CapabilityResponseDto = decode_json(response).await;
+
+    assert_eq!(
+        capabilities.runtime_proof().scanner_identity().platform(),
+        RuntimePlatformDto::Windows
+    );
+    assert_eq!(
+        capabilities
+            .runtime_proof()
+            .scanner_identity()
+            .process_kind(),
+        ScannerProcessKindDto::CurrentProcess
+    );
+    assert_eq!(
+        capabilities
+            .runtime_proof()
+            .permission_probe()
+            .required_action(),
+        PermissionRequiredActionDto::None
+    );
+}
+
 #[tokio::test]
 async fn permission_probe_runs_under_authorized_scanner_process() {
     let app = build_router(test_state());
@@ -211,6 +244,35 @@ async fn permission_probe_runs_under_authorized_scanner_process() {
     assert_eq!(probe.status(), PermissionProbeStatusDto::Verified);
     assert_eq!(probe.required_action(), PermissionRequiredActionDto::None);
     assert!(probe.checked_at_unix_ms().is_some());
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn permission_probe_missing_windows_target_degrades_without_admin_action() {
+    let app = build_router(test_state());
+    let missing = env::temp_dir()
+        .join("clean_disk_missing_windows_probe_target")
+        .join("definitely-not-created");
+    let request = PermissionProbeRequestDto::new(
+        PROTOCOL_VERSION,
+        ScanTargetDto::new(
+            RawPathDto::new(missing.to_string_lossy().into_owned()).expect("path"),
+            TargetScopeDto::LocalPath,
+            BoundaryPolicyDto::StayOnInitialFilesystem,
+            HardlinkPolicyDto::Ignore,
+        ),
+    );
+    let body = Body::from(serde_json::to_vec(&request).expect("json"));
+
+    let response = app
+        .oneshot(authorized_request("POST", "/v1/permission-probe", body))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let probe: PermissionProbeDto = decode_json(response).await;
+
+    assert_eq!(probe.status(), PermissionProbeStatusDto::Degraded);
+    assert_eq!(probe.required_action(), PermissionRequiredActionDto::None);
 }
 
 #[tokio::test]
