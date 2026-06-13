@@ -965,6 +965,24 @@ abstract class CleanDiskLocalizations {
   /// **'No data'**
   String get metricNoDataValue;
 
+  /// Readable value shown while scan metrics are still being collected.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanning'**
+  String get metricScanningValue;
+
+  /// Metric subtitle shown while a scan is running before final totals are available.
+  ///
+  /// In en, this message translates to:
+  /// **'Collecting files'**
+  String get metricScanningSubtitle;
+
+  /// Largest-folder metric subtitle shown while a scan is running before folder totals are available.
+  ///
+  /// In en, this message translates to:
+  /// **'Finding largest folders'**
+  String get metricScanningLargestSubtitle;
+
   /// Metric subtitle shown before scan results are available.
   ///
   /// In en, this message translates to:

@@ -477,6 +477,15 @@ class CleanDiskLocalizationsEn extends CleanDiskLocalizations {
   String get metricNoDataValue => 'No data';
 
   @override
+  String get metricScanningValue => 'Scanning';
+
+  @override
+  String get metricScanningSubtitle => 'Collecting files';
+
+  @override
+  String get metricScanningLargestSubtitle => 'Finding largest folders';
+
+  @override
   String get metricRunScanSubtitle => 'Run a scan';
 
   @override

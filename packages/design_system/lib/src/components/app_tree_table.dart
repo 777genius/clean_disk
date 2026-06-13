@@ -508,27 +508,40 @@ class _AppTreeTableRowTile extends StatelessWidget {
                               color: style.queuedColor,
                             ),
                           ],
-                          if (row.loading) ...[
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: style.selectedProgressColor,
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                     ),
                     Expanded(
                       flex: style.sizeFlex,
-                      child: Text(
-                        row.sizeText,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: _monoStyle(context, style),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          SizedBox(
+                            width: 20,
+                            child: row.loading
+                                ? Center(
+                                    child: SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: style.selectedProgressColor,
+                                      ),
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              row.sizeText,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.end,
+                              style: _monoStyle(context, style),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     Expanded(

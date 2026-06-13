@@ -605,6 +605,18 @@
   "@metricNoDataValue": {
     "description": "Readable value shown when a scan metric is not available yet."
   },
+  "metricScanningValue": "Scanning",
+  "@metricScanningValue": {
+    "description": "Readable value shown while scan metrics are still being collected."
+  },
+  "metricScanningSubtitle": "Collecting files",
+  "@metricScanningSubtitle": {
+    "description": "Metric subtitle shown while a scan is running before final totals are available."
+  },
+  "metricScanningLargestSubtitle": "Finding largest folders",
+  "@metricScanningLargestSubtitle": {
+    "description": "Largest-folder metric subtitle shown while a scan is running before folder totals are available."
+  },
   "metricRunScanSubtitle": "Run a scan",
   "@metricRunScanSubtitle": {
     "description": "Metric subtitle shown before scan results are available."
