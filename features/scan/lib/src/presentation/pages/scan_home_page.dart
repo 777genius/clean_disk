@@ -1588,6 +1588,7 @@ class _DiskUsageMapPanel extends StatelessWidget {
                 : Padding(
                     padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
                     child: SizedBox(
+                      width: double.infinity,
                       height: compact ? 220 : 260,
                       child: DiskUsageMapView(
                         projection: projection,
