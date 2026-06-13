@@ -385,7 +385,10 @@ class _AppTreeTableHeader extends StatelessWidget {
           ),
           Expanded(
             flex: style.percentFlex,
-            child: _HeaderText(columns.percent, style: style),
+            child: Padding(
+              padding: const EdgeInsets.only(left: 12),
+              child: _HeaderText(columns.percent, style: style),
+            ),
           ),
           Expanded(
             flex: style.itemsFlex,
@@ -546,36 +549,50 @@ class _AppTreeTableRowTile extends StatelessWidget {
                     ),
                     Expanded(
                       flex: style.percentFlex,
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: LinearProgressIndicator(
-                                value: row.progress.clamp(0.0, 1.0),
-                                minHeight: 6,
-                                backgroundColor: style.progressTrackColor,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  row.selected
-                                      ? style.selectedProgressColor
-                                      : style.progressColor,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 12),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final showProgressBar = constraints.maxWidth >= 80;
+                            return Row(
+                              children: [
+                                if (showProgressBar) ...[
+                                  Expanded(
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: LinearProgressIndicator(
+                                        value: row.progress.clamp(0.0, 1.0),
+                                        minHeight: 6,
+                                        backgroundColor:
+                                            style.progressTrackColor,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              row.selected
+                                                  ? style.selectedProgressColor
+                                                  : style.progressColor,
+                                            ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 56,
+                                  ),
+                                  child: Text(
+                                    row.percentText,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    overflow: TextOverflow.clip,
+                                    textAlign: TextAlign.end,
+                                    style: _monoStyle(context, style),
+                                  ),
                                 ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 56,
-                            child: Text(
-                              row.percentText,
-                              maxLines: 1,
-                              softWrap: false,
-                              overflow: TextOverflow.clip,
-                              textAlign: TextAlign.end,
-                              style: _monoStyle(context, style),
-                            ),
-                          ),
-                        ],
+                              ],
+                            );
+                          },
+                        ),
                       ),
                     ),
                     Expanded(

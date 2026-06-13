@@ -114,6 +114,47 @@ void main() {
     expect(loaderRect.right, lessThanOrEqualTo(sizeRect.left));
   });
 
+  testWidgets('keeps size text separated from row progress bar', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark(),
+        home: const Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 140,
+            child: AppTreeTable(
+              columns: columns,
+              rows: [
+                AppTreeTableRow(
+                  id: '1',
+                  name: 'Users',
+                  sizeText: '196.7 GB',
+                  percentText: '100.0%',
+                  itemsText: '1',
+                  progress: 1,
+                  depth: 0,
+                  selected: true,
+                  hasChildren: true,
+                  expanded: false,
+                  icon: Icons.folder_outlined,
+                ),
+              ],
+              emptyState: Text('Empty'),
+              style: style,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final sizeRect = tester.getRect(find.text('196.7 GB'));
+    final progressRect = tester.getRect(find.byType(LinearProgressIndicator));
+
+    expect(progressRect.left - sizeRect.right, greaterThanOrEqualTo(10));
+  });
+
   testWidgets('can hide header for empty first-run states', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
