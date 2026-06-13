@@ -937,7 +937,7 @@ class ScanWorkspaceView extends StatelessWidget {
                               onToggleDetailsPane: onToggleDetailsPane,
                             ),
                     ),
-                    _ScanFooter(store: store),
+                    _ScanFooter(store: store, onCancelScan: onPause),
                   ],
                 );
               },
@@ -2621,9 +2621,10 @@ class _CollapsedDetailsRail extends StatelessWidget {
 }
 
 class _ScanFooter extends StatefulWidget {
-  const _ScanFooter({required this.store});
+  const _ScanFooter({required this.store, required this.onCancelScan});
 
   final ScanWorkspaceStore store;
+  final VoidCallback onCancelScan;
 
   @override
   State<_ScanFooter> createState() => _ScanFooterState();
@@ -2743,6 +2744,7 @@ class _ScanFooterState extends State<_ScanFooter>
     final l10n = context.cleanDiskL10n;
     final progress = widget.store.progress;
     final running = widget.store.sessionStatus?.state == SessionState.running;
+    final canCancelScan = running && widget.store.canCancelScan;
     final hasSnapshot = widget.store.activeSnapshotId != null;
     final hasBlockingRuntimeState =
         widget.store.daemonAvailability == ScanDaemonAvailability.offline ||
@@ -2796,6 +2798,13 @@ class _ScanFooterState extends State<_ScanFooter>
                                 ),
                               ),
                             ),
+                            if (canCancelScan) ...[
+                              const SizedBox(width: 8),
+                              _FooterStopAction(
+                                tooltip: l10n.cancelScanAction,
+                                onTap: widget.onCancelScan,
+                              ),
+                            ],
                           ],
                         ),
                         const SizedBox(height: 4),
@@ -2863,6 +2872,13 @@ class _ScanFooterState extends State<_ScanFooter>
                           ),
                         ),
                         const SizedBox(width: 24),
+                        if (canCancelScan) ...[
+                          _FooterStopAction(
+                            tooltip: l10n.cancelScanAction,
+                            onTap: widget.onCancelScan,
+                          ),
+                          const SizedBox(width: 16),
+                        ],
                         _FooterStat(
                           label: l10n.progressFilesScannedLabel,
                           value: _progressItemsText(l10n, progress),
@@ -2968,6 +2984,35 @@ class _FooterProgress extends StatelessWidget {
         minHeight: 4,
         backgroundColor: _ScanColors.progressTrack,
         valueColor: const AlwaysStoppedAnimation<Color>(_ScanColors.cyan),
+      ),
+    );
+  }
+}
+
+class _FooterStopAction extends StatelessWidget {
+  const _FooterStopAction({required this.tooltip, required this.onTap});
+
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 36,
+      height: 36,
+      child: IconButton(
+        key: const ValueKey('scan-footer-stop-action'),
+        tooltip: tooltip,
+        onPressed: onTap,
+        visualDensity: VisualDensity.compact,
+        iconSize: 20,
+        icon: const Icon(Icons.stop_rounded),
+        color: _ScanColors.pink,
+        style: IconButton.styleFrom(
+          backgroundColor: _ScanColors.input,
+          side: const BorderSide(color: _ScanColors.border),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
       ),
     );
   }

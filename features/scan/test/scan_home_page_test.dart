@@ -260,11 +260,41 @@ void main() {
         find.byKey(const ValueKey('scan-footer-progress')),
         findsOneWidget,
       );
+      expect(
+        find.byKey(const ValueKey('scan-footer-stop-action')),
+        findsOneWidget,
+      );
       expect(find.text('Files Scanned'), findsOneWidget);
       expect(find.text('Elapsed'), findsOneWidget);
       expect(find.text('Throughput'), findsOneWidget);
     },
   );
+
+  testWidgets('footer stop action cancels a running scan', (tester) async {
+    final fixture = FakeScanFeatureFixture(
+      repository: FakeScanRepository()..deferStartCompletion = true,
+    );
+    final result = await _pumpScanHome(
+      tester,
+      fixture: fixture,
+      size: const Size(1440, 900),
+    );
+    await result.store.start(_scanCommand());
+    await tester.pump();
+    await tester.pump();
+
+    expect(result.store.sessionStatus?.state, SessionState.running);
+    expect(
+      find.byKey(const ValueKey('scan-footer-stop-action')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('scan-footer-stop-action')));
+    await tester.pump();
+
+    expect(result.store.sessionStatus?.state, SessionState.canceled);
+    expect(find.byKey(const ValueKey('scan-footer-stop-action')), findsNothing);
+  });
 
   testWidgets('running footer shows elapsed time and item rate', (
     tester,
