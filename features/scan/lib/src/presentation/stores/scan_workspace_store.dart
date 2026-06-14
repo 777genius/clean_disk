@@ -159,6 +159,7 @@ final class ScanWorkspaceStore with Store {
     required ExecuteCleanupPlanUseCase executeCleanupPlan,
     required GetCleanupRecoveryInboxUseCase getCleanupRecoveryInbox,
     required WatchScanEventsUseCase watchScanEvents,
+    DateTime Function()? now,
   }) : _getCapabilities = getCapabilities,
        _probePermission = probePermission,
        _launchPermissionRepair = launchPermissionRepair,
@@ -178,7 +179,8 @@ final class ScanWorkspaceStore with Store {
        _createCleanupPlan = createCleanupPlan,
        _executeCleanupPlan = executeCleanupPlan,
        _getCleanupRecoveryInbox = getCleanupRecoveryInbox,
-       _watchScanEvents = watchScanEvents;
+       _watchScanEvents = watchScanEvents,
+       _now = now ?? DateTime.now;
 
   final GetCapabilitiesUseCase _getCapabilities;
   final ProbePermissionUseCase _probePermission;
@@ -200,6 +202,7 @@ final class ScanWorkspaceStore with Store {
   final ExecuteCleanupPlanUseCase _executeCleanupPlan;
   final GetCleanupRecoveryInboxUseCase _getCleanupRecoveryInbox;
   final WatchScanEventsUseCase _watchScanEvents;
+  final DateTime Function() _now;
 
   final Observable<ScanDaemonAvailability> _daemonAvailability = Observable(
     ScanDaemonAvailability.unknown,
@@ -281,6 +284,7 @@ final class ScanWorkspaceStore with Store {
   StreamSubscription<Result<ScanEventEnvelope>>? _eventSubscription;
   EventSequence? _lastEventSequence;
   final List<ScanEventEnvelope> _pendingSessionEvents = [];
+  DateTime? _runningSessionStartedAt;
   void Function()? _onChanged;
   var _searchRequestGeneration = 0;
   var _diskUsageMapRequestGeneration = 0;
@@ -752,6 +756,7 @@ final class ScanWorkspaceStore with Store {
       final currentViewport = viewport;
       _activeSnapshotId.value = null;
       _progress.value = null;
+      _runningSessionStartedAt = null;
       _resetTreeProjection();
       _resetPartialScanProjection();
       _resetDiskUsageMapProjection();
@@ -777,6 +782,7 @@ final class ScanWorkspaceStore with Store {
         });
         _replayPendingEventsForSession(value.sessionId, value.state);
       case ResultFailure(:final failure):
+        _runningSessionStartedAt = null;
         _setFailure(failure);
     }
   }
@@ -1504,6 +1510,7 @@ final class ScanWorkspaceStore with Store {
       switch (event) {
         case ScanStarted():
           _resetPartialScanProjection();
+          _markRunningSession(eventSessionId);
           _sessionStatus.value = ScanSessionStatus(
             sessionId: eventSessionId,
             state: SessionState.running,
@@ -1512,15 +1519,18 @@ final class ScanWorkspaceStore with Store {
             progress: progress,
           );
         case ScanProgressed(:final progress):
-          _progress.value = progress;
+          _markRunningSession(eventSessionId);
+          final nextProgress = _progressWithRunningTiming(progress);
+          _progress.value = nextProgress;
           _sessionStatus.value = ScanSessionStatus(
             sessionId: eventSessionId,
             state: SessionState.running,
             snapshotId: activeSnapshotId,
             rootNodeIds: sessionStatus?.rootNodeIds ?? const [],
-            progress: progress,
+            progress: nextProgress,
           );
         case ScanGrowingTreeBatch(:final scannedItems, :final events):
+          _markRunningSession(eventSessionId);
           _applyGrowingTreeBatch(events);
           final nextProgress = _progressFromGrowingBatch(scannedItems);
           _progress.value = nextProgress;
@@ -1548,6 +1558,7 @@ final class ScanWorkspaceStore with Store {
             progress: progress,
           );
           _resetPartialScanProjection();
+          _runningSessionStartedAt = null;
           if (shouldMarkStale || viewport.isStale) {
             _viewport.value = viewport.copyWith(isStale: shouldMarkStale);
           }
@@ -1560,6 +1571,7 @@ final class ScanWorkspaceStore with Store {
             progress: progress,
           );
           _resetPartialScanProjection();
+          _runningSessionStartedAt = null;
         case ScanFailed(:final message):
           _sessionStatus.value = ScanSessionStatus(
             sessionId: eventSessionId,
@@ -1569,6 +1581,7 @@ final class ScanWorkspaceStore with Store {
             progress: progress,
           );
           _resetPartialScanProjection();
+          _runningSessionStartedAt = null;
           _lastFailure.value = AppFailure.unexpected(message: message);
         case UnknownScanEvent():
           break;
@@ -1807,6 +1820,7 @@ final class ScanWorkspaceStore with Store {
   }
 
   void _applySessionStatus(ScanSessionStatus status) {
+    _syncRunningSessionTiming(status);
     final effectiveProgress = _effectiveStatusProgress(status);
     _sessionStatus.value = effectiveProgress == status.progress
         ? status
@@ -2037,15 +2051,56 @@ final class ScanWorkspaceStore with Store {
 
   ScanProgress _progressFromGrowingBatch(BigInt scannedItems) {
     final currentProgress = progress;
-    if (currentProgress != null &&
-        currentProgress.scannedItems >= scannedItems) {
-      return currentProgress;
-    }
+    final elapsedMs = _maxNullableBigInt(
+      currentProgress?.elapsedMs,
+      _runningElapsedMs(),
+    );
+    final effectiveScannedItems =
+        currentProgress != null && currentProgress.scannedItems > scannedItems
+        ? currentProgress.scannedItems
+        : scannedItems;
     return ScanProgress(
-      scannedItems: scannedItems,
-      elapsedMs: currentProgress?.elapsedMs,
+      scannedItems: effectiveScannedItems,
+      elapsedMs: elapsedMs,
       throughputBytesPerSec: currentProgress?.throughputBytesPerSec,
     );
+  }
+
+  ScanProgress _progressWithRunningTiming(ScanProgress progress) {
+    return ScanProgress(
+      scannedItems: progress.scannedItems,
+      elapsedMs: _maxNullableBigInt(progress.elapsedMs, _runningElapsedMs()),
+      throughputBytesPerSec: progress.throughputBytesPerSec,
+    );
+  }
+
+  void _syncRunningSessionTiming(ScanSessionStatus status) {
+    if (status.state == SessionState.running) {
+      _markRunningSession(status.sessionId);
+      return;
+    }
+    if (status.isTerminal) {
+      _runningSessionStartedAt = null;
+    }
+  }
+
+  void _markRunningSession(ScanSessionId sessionId) {
+    final currentStatus = _sessionStatus.value;
+    if (_runningSessionStartedAt != null &&
+        currentStatus?.sessionId == sessionId &&
+        currentStatus?.state == SessionState.running) {
+      return;
+    }
+    _runningSessionStartedAt = _now();
+  }
+
+  BigInt? _runningElapsedMs() {
+    final startedAt = _runningSessionStartedAt;
+    if (startedAt == null) {
+      return null;
+    }
+    final elapsedMs = _now().difference(startedAt).inMilliseconds;
+    return BigInt.from(elapsedMs < 0 ? 0 : elapsedMs);
   }
 
   void _applyGrowingTreeBatch(List<GrowingTreeEvent> events) {
@@ -2214,6 +2269,7 @@ final class ScanWorkspaceStore with Store {
     _sessionStatus.value = null;
     _lastEventSequence = null;
     _progress.value = null;
+    _runningSessionStartedAt = null;
     _activeSnapshotId.value = null;
     _pageLoadState.value = ScanPageLoadState.idle;
     _selectedNodeId.value = null;
@@ -2263,6 +2319,16 @@ bool _isTerminalEvent(ScanEvent event) {
   return event is ScanSnapshotPublished ||
       event is ScanCanceled ||
       event is ScanFailed;
+}
+
+BigInt? _maxNullableBigInt(BigInt? left, BigInt? right) {
+  if (left == null) {
+    return right;
+  }
+  if (right == null) {
+    return left;
+  }
+  return left >= right ? left : right;
 }
 
 final class _TreeChildrenPageState {

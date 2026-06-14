@@ -276,6 +276,9 @@ class _DiskUsageMapFallbackRow extends StatelessWidget {
       label: '${tile.label}, $sizeText',
       child: InkWell(
         onTap: tile.disabled ? null : onTap,
+        mouseCursor: tile.disabled || onTap == null
+            ? SystemMouseCursors.basic
+            : SystemMouseCursors.click,
         child: Opacity(
           opacity: tile.disabled ? style.disabledOpacity : 1,
           child: Padding(

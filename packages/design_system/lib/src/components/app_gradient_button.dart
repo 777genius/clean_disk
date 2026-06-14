@@ -53,6 +53,9 @@ class AppGradientButton extends StatelessWidget {
             ),
             child: InkWell(
               onTap: onPressed,
+              mouseCursor: onPressed == null
+                  ? SystemMouseCursors.basic
+                  : SystemMouseCursors.click,
               borderRadius: BorderRadius.circular(borderRadius),
               child: Center(
                 child: Text(

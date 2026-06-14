@@ -44,6 +44,19 @@ abstract final class AppTheme {
   }
 
   static ThemeData _build({required ColorScheme colorScheme}) {
+    final clickCursor = WidgetStateProperty.resolveWith<MouseCursor?>((states) {
+      return states.contains(WidgetState.disabled)
+          ? SystemMouseCursors.basic
+          : SystemMouseCursors.click;
+    });
+    final buttonShape = WidgetStatePropertyAll(
+      RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    );
+    final buttonStyle = ButtonStyle(
+      mouseCursor: clickCursor,
+      shape: buttonShape,
+    );
+
     return ThemeData(
       useMaterial3: true,
       fontFamily: _fontFamily,
@@ -52,6 +65,10 @@ abstract final class AppTheme {
       inputDecorationTheme: const InputDecorationTheme(
         border: OutlineInputBorder(),
       ),
+      textButtonTheme: TextButtonThemeData(style: buttonStyle),
+      filledButtonTheme: FilledButtonThemeData(style: buttonStyle),
+      outlinedButtonTheme: OutlinedButtonThemeData(style: buttonStyle),
+      iconButtonTheme: IconButtonThemeData(style: buttonStyle),
       visualDensity: VisualDensity.standard,
     );
   }

@@ -38,8 +38,16 @@ void main() {
       find.byKey(const ValueKey('scan-target-menu-current')),
       findsOneWidget,
     );
-    expect(find.textContaining('Permission Proof'), findsOneWidget);
-    expect(find.textContaining('Verified'), findsOneWidget);
+    expect(find.textContaining('Permission Proof'), findsNothing);
+    expect(find.textContaining('Verified'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('scan-target-menu-permission-line')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('permission-proof-compact')),
+      findsNothing,
+    );
     expect(find.text('Probe pending'), findsNothing);
     expect(find.text('Unverified'), findsNothing);
     expect(find.textContaining('Development build'), findsNothing);
@@ -58,9 +66,7 @@ void main() {
     expect(find.text('Dev shell / Unsigned'), findsNothing);
     expect(find.text('Not checked'), findsNothing);
 
-    await tester.tap(find.byTooltip('Re-check'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Verified'), findsOneWidget);
+    expect(find.byTooltip('Re-check'), findsNothing);
     expect(find.text('Not checked'), findsNothing);
 
     await tester.tap(
@@ -400,46 +406,49 @@ void main() {
     expect(find.text('1.0k items/s'), findsOneWidget);
   });
 
-  testWidgets('metric strip shows scanning copy while totals are pending', (
-    tester,
-  ) async {
-    final repository = FakeScanRepository()
-      ..deferStartCompletion = true
-      ..emitStartScanEvents = false;
-    final fixture = FakeScanFeatureFixture(repository: repository);
-    final result = await _pumpScanHome(
-      tester,
-      fixture: fixture,
-      size: const Size(1440, 900),
-    );
-    await result.store.start(_scanCommand());
-    await tester.pump();
+  testWidgets(
+    'metric strip avoids scanning placeholders while totals are pending',
+    (tester) async {
+      final repository = FakeScanRepository()
+        ..deferStartCompletion = true
+        ..emitStartScanEvents = false;
+      final fixture = FakeScanFeatureFixture(repository: repository);
+      final result = await _pumpScanHome(
+        tester,
+        fixture: fixture,
+        size: const Size(1440, 900),
+      );
+      await result.store.start(_scanCommand());
+      await tester.pump();
 
-    result.fixture.eventClient.add(
-      ScanEventEnvelope(
-        protocolVersion: ProtocolVersion.current,
-        sequence: EventSequence('2'),
-        emittedAtUnixMs: BigInt.from(1700000000002),
-        event: ScanProgressed(
-          sessionId: FakeScanRepository.sessionId,
-          progress: ScanProgress(scannedItems: BigInt.from(208214)),
+      result.fixture.eventClient.add(
+        ScanEventEnvelope(
+          protocolVersion: ProtocolVersion.current,
+          sequence: EventSequence('2'),
+          emittedAtUnixMs: BigInt.from(1700000000002),
+          event: ScanProgressed(
+            sessionId: FakeScanRepository.sessionId,
+            progress: ScanProgress(scannedItems: BigInt.from(208214)),
+          ),
         ),
-      ),
-    );
-    await tester.pump();
+      );
+      await tester.pump();
 
-    expect(result.store.sessionStatus?.state, SessionState.running);
-    expect(find.text('TOTAL SCANNED'), findsOneWidget);
-    expect(find.text('LARGEST FOLDER'), findsOneWidget);
-    expect(find.text('Scanning'), findsNWidgets(4));
-    expect(
-      find.textContaining('Scanning and collecting candidates'),
-      findsOneWidget,
-    );
-    expect(find.text('208214 files'), findsOneWidget);
-    expect(find.text('Finding largest folders'), findsOneWidget);
-    expect(find.text('Run a scan'), findsNothing);
-  });
+      expect(result.store.sessionStatus?.state, SessionState.running);
+      expect(find.text('TOTAL SCANNED'), findsOneWidget);
+      expect(find.text('LARGEST FOLDER'), findsOneWidget);
+      expect(find.text('Scanning'), findsNothing);
+      expect(
+        find.textContaining('Scanning and collecting candidates'),
+        findsOneWidget,
+      );
+      expect(find.text('0 B'), findsWidgets);
+      expect(find.text('No data'), findsWidgets);
+      expect(find.text('208214 files'), findsOneWidget);
+      expect(find.text('Finding largest folders'), findsOneWidget);
+      expect(find.text('Run a scan'), findsNothing);
+    },
+  );
 
   testWidgets('renders growing tree rows without selecting cleanup authority', (
     tester,
@@ -494,21 +503,28 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Live Root'), findsOneWidget);
-    expect(find.text('Live Folder'), findsOneWidget);
+    final liveRootRow = find.byKey(
+      const ValueKey('app-tree-table-row-partial:101'),
+    );
+    final liveFolderRow = find.byKey(
+      const ValueKey('app-tree-table-row-partial:102'),
+    );
 
-    await tester.tap(find.text('Live Root'));
+    expect(liveRootRow, findsOneWidget);
+    expect(liveFolderRow, findsOneWidget);
+
+    await tester.tap(liveRootRow);
     await tester.pump();
 
-    expect(find.text('Live Folder'), findsNothing);
+    expect(liveFolderRow, findsNothing);
     expect(result.store.selectedNodeId, isNull);
 
-    await tester.tap(find.text('Live Root'));
+    await tester.tap(liveRootRow);
     await tester.pump();
 
-    expect(find.text('Live Folder'), findsOneWidget);
+    expect(liveFolderRow, findsOneWidget);
 
-    await tester.tap(find.text('Live Folder'));
+    await tester.tap(liveFolderRow);
     await tester.pump();
 
     expect(result.store.selectedNodeId, isNull);
@@ -902,7 +918,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(launcher.targets.single.path.value, '/tmp/clean-disk-fixture');
-    expect(find.textContaining('Verified'), findsOneWidget);
+    expect(find.textContaining('Denied'), findsNothing);
+    expect(find.textContaining('Verified'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('scan-target-menu-permission-line')),
+      findsNothing,
+    );
   });
 
   testWidgets(
@@ -1819,7 +1840,11 @@ void main() {
       '/tmp/clean-disk-fixture',
     );
     await _openTargetMenu(tester);
-    expect(find.textContaining('Verified'), findsOneWidget);
+    expect(find.textContaining('Verified'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('scan-target-menu-permission-line')),
+      findsNothing,
+    );
     expect(find.text('Probe pending'), findsNothing);
   });
 

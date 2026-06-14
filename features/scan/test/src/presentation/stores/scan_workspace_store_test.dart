@@ -633,9 +633,11 @@ void main() {
     () async {
       final repository = _FakeScanRepository();
       final eventClient = _FakeScanEventClient();
-      final store = _store(repository, eventClient);
+      var now = DateTime.fromMillisecondsSinceEpoch(1000);
+      final store = _store(repository, eventClient, now: () => now);
 
       await store.start(_startCommand());
+      now = now.add(const Duration(seconds: 2));
 
       store.reconcileEvent(
         ScanEventEnvelope(
@@ -674,6 +676,7 @@ void main() {
       );
 
       expect(store.progress?.scannedItems, BigInt.from(3));
+      expect(store.progress?.elapsedMs, BigInt.from(2000));
       expect(store.hasPartialScanTree, isTrue);
       expect(store.partialVisibleTreeRows.map((row) => row.item.name), [
         'Macintosh HD',
@@ -1820,6 +1823,7 @@ ScanWorkspaceStore _store(
   ScanTargetCatalog? targetCatalog,
   ScanTargetPreferenceStore? targetPreferenceStore,
   PathRevealer? pathRevealer,
+  DateTime Function()? now,
 }) {
   return ScanWorkspaceStore(
     getCapabilities: GetCapabilitiesUseCase(repository),
@@ -1849,6 +1853,7 @@ ScanWorkspaceStore _store(
     executeCleanupPlan: ExecuteCleanupPlanUseCase(repository),
     getCleanupRecoveryInbox: GetCleanupRecoveryInboxUseCase(repository),
     watchScanEvents: WatchScanEventsUseCase(eventClient),
+    now: now,
   );
 }
 

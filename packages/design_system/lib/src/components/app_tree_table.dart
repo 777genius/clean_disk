@@ -491,34 +491,39 @@ class _AppTreeTablePanelHeader extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onToggleCollapsed,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (title != null)
-                    Text(
-                      title!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: _bodyStyle(context).copyWith(
-                        color: style.textColor,
-                        fontWeight: FontWeight.w800,
+            child: MouseRegion(
+              cursor: onToggleCollapsed == null
+                  ? SystemMouseCursors.basic
+                  : SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onToggleCollapsed,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (title != null)
+                      Text(
+                        title!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: _bodyStyle(context).copyWith(
+                          color: style.textColor,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                    ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: _bodyStyle(
-                        context,
-                      ).copyWith(color: style.mutedTextColor),
-                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: _bodyStyle(
+                          context,
+                        ).copyWith(color: style.mutedTextColor),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -576,6 +581,9 @@ class _AppTreeTableRowTile extends StatelessWidget {
           color: _rowColor(row, style),
           child: InkWell(
             onTap: row.disabled ? null : onTap,
+            mouseCursor: row.disabled || onTap == null
+                ? SystemMouseCursors.basic
+                : SystemMouseCursors.click,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(

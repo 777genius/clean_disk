@@ -33,6 +33,9 @@ class AppTapSurface extends StatelessWidget {
       clipBehavior: clipBehavior,
       child: InkWell(
         onTap: onTap,
+        mouseCursor: onTap == null
+            ? SystemMouseCursors.basic
+            : SystemMouseCursors.click,
         borderRadius: customBorder == null ? borderRadius : null,
         customBorder: customBorder,
         child: child,

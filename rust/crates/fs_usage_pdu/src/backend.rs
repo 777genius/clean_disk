@@ -218,6 +218,13 @@ fn build_pdu_tree(
         ),
         path: root.to_path_buf(),
         get_info: |path| {
+            if should_prune_boundary_descendant(root, path, device_boundary) {
+                return Info {
+                    size: Bytes::default(),
+                    children: Vec::new(),
+                };
+            }
+
             let (kind, size, same_device) = match symlink_metadata(path) {
                 Err(error) => {
                     reporter.report_error(SymlinkMetadata, path, error);
@@ -254,10 +261,13 @@ fn build_pdu_tree(
                         None
                     }
                     Ok(entry) => {
+                        let child_path = entry.path();
+                        if should_prune_boundary_descendant(root, &child_path, device_boundary) {
+                            return None;
+                        }
                         let kind = match entry.file_type() {
                             Ok(file_type) => classify_file_type(&file_type),
                             Err(error) => {
-                                let child_path = entry.path();
                                 reporter.report_error(AccessEntry, &child_path, error);
                                 NodeKind::Unknown
                             }
@@ -279,6 +289,33 @@ fn build_pdu_tree(
         max_depth,
     }
     .into()
+}
+
+fn should_prune_boundary_descendant(
+    root: &Path,
+    path: &Path,
+    device_boundary: DeviceBoundary,
+) -> bool {
+    matches!(device_boundary, DeviceBoundary::Stay)
+        && is_macos_root_system_volume_descendant(root, path)
+}
+
+#[cfg(target_os = "macos")]
+fn is_macos_root_system_volume_descendant(root: &Path, path: &Path) -> bool {
+    if root != Path::new("/") {
+        return false;
+    }
+
+    let mut components = path.components();
+    matches!(components.next(), Some(std::path::Component::RootDir))
+        && matches!(components.next(), Some(std::path::Component::Normal(value)) if value == "System")
+        && matches!(components.next(), Some(std::path::Component::Normal(value)) if value == "Volumes")
+        && components.next().is_some()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn is_macos_root_system_volume_descendant(_root: &Path, _path: &Path) -> bool {
+    false
 }
 
 fn emit_final_root_completion_event(
@@ -348,4 +385,53 @@ fn pdu_capabilities() -> ScannerBackendCapabilities {
             SupportLevel::Supported,
         ),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn stay_policy_prunes_macos_system_volume_descendants_for_root_scan() {
+        assert!(should_prune_boundary_descendant(
+            Path::new("/"),
+            Path::new("/System/Volumes/Data"),
+            DeviceBoundary::Stay,
+        ));
+        assert!(should_prune_boundary_descendant(
+            Path::new("/"),
+            Path::new("/System/Volumes/Data/Users/belief"),
+            DeviceBoundary::Stay,
+        ));
+        assert!(should_prune_boundary_descendant(
+            Path::new("/"),
+            Path::new("/System/Volumes/VM"),
+            DeviceBoundary::Stay,
+        ));
+    }
+
+    #[test]
+    fn boundary_pruning_keeps_user_visible_paths_and_explicit_targets() {
+        assert!(!should_prune_boundary_descendant(
+            Path::new("/"),
+            Path::new("/Users/belief"),
+            DeviceBoundary::Stay,
+        ));
+        assert!(!should_prune_boundary_descendant(
+            Path::new("/"),
+            Path::new("/System/Volumes"),
+            DeviceBoundary::Stay,
+        ));
+        assert!(!should_prune_boundary_descendant(
+            Path::new("/System/Volumes/Data"),
+            Path::new("/System/Volumes/Data/Users/belief"),
+            DeviceBoundary::Stay,
+        ));
+        assert!(!should_prune_boundary_descendant(
+            Path::new("/"),
+            Path::new("/System/Volumes/Data"),
+            DeviceBoundary::Cross,
+        ));
+    }
 }

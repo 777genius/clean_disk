@@ -104,4 +104,35 @@ void main() {
     );
     expect(hintRect.left, greaterThan(iconRect.right));
   });
+
+  testWidgets('uses readable text color when text style omits color', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: 'private');
+    addTearDown(controller.dispose);
+    final theme = AppTheme.dark();
+
+    await tester.pumpWidget(
+      AppHeadlessScope(
+        theme: theme,
+        appBuilder: (overlayBuilder) {
+          return MaterialApp(
+            theme: theme,
+            builder: overlayBuilder,
+            home: Scaffold(
+              body: AppTextField(
+                controller: controller,
+                placeholder: 'Search',
+                textStyle: theme.textTheme.bodyMedium?.copyWith(fontSize: 14),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    final editableText = tester.widget<EditableText>(find.byType(EditableText));
+
+    expect(editableText.style.color, theme.colorScheme.onSurface);
+  });
 }

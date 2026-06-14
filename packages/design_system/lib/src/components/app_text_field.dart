@@ -52,8 +52,13 @@ class AppTextField extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final borderRadius = BorderRadius.circular(8);
     final effectiveHeight = height ?? 52;
-    final effectiveTextStyle =
+    final baseTextStyle =
         textStyle ?? theme.textTheme.bodyLarge ?? const TextStyle(fontSize: 16);
+    final effectiveTextColor = textStyle?.color ?? colorScheme.onSurface;
+    final effectiveTextStyle = baseTextStyle.copyWith(
+      color: effectiveTextColor,
+      letterSpacing: baseTextStyle.letterSpacing ?? 0,
+    );
     final effectivePlaceholderColor =
         placeholderColor ?? colorScheme.onSurfaceVariant.withValues(alpha: 0.6);
     final effectiveIconColor = prefixIconColor ?? colorScheme.onSurfaceVariant;
@@ -127,33 +132,38 @@ class AppTextField extends StatelessWidget {
         containerBackgroundColor: colorScheme.surface,
         containerPadding: containerPadding,
         textStyle: effectiveTextStyle,
+        textColor: effectiveTextColor,
         placeholderColor: effectivePlaceholderColor,
         minSize: Size.fromHeight(effectiveHeight),
       ),
     );
 
-    final themedField = Theme(
-      data: theme.copyWith(
-        inputDecorationTheme: theme.inputDecorationTheme.copyWith(
-          filled: false,
-          isDense: true,
-          hintStyle: effectiveTextStyle.copyWith(
-            color: effectivePlaceholderColor,
-          ),
-          prefixIconColor: effectiveIconColor,
-          prefixIconConstraints: prefixIcon == null
-              ? null
-              : BoxConstraints(
-                  minWidth: iconSlotWidth,
-                  minHeight: effectiveHeight,
-                ),
-          suffixIconConstraints: BoxConstraints(
-            minWidth: effectiveHeight,
-            minHeight: effectiveHeight,
+    final themedField = DefaultSelectionStyle(
+      cursorColor: colorScheme.primary,
+      selectionColor: colorScheme.primary.withValues(alpha: 0.28),
+      child: Theme(
+        data: theme.copyWith(
+          inputDecorationTheme: theme.inputDecorationTheme.copyWith(
+            filled: false,
+            isDense: true,
+            hintStyle: effectiveTextStyle.copyWith(
+              color: effectivePlaceholderColor,
+            ),
+            prefixIconColor: effectiveIconColor,
+            prefixIconConstraints: prefixIcon == null
+                ? null
+                : BoxConstraints(
+                    minWidth: iconSlotWidth,
+                    minHeight: effectiveHeight,
+                  ),
+            suffixIconConstraints: BoxConstraints(
+              minWidth: effectiveHeight,
+              minHeight: effectiveHeight,
+            ),
           ),
         ),
+        child: field,
       ),
-      child: field,
     );
 
     if (height == null) {

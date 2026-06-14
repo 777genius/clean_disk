@@ -1213,7 +1213,7 @@ class _FirstRunTargetChooser extends StatelessWidget {
   }
 }
 
-class _TargetChoiceRow extends StatelessWidget {
+class _TargetChoiceRow extends StatefulWidget {
   const _TargetChoiceRow({
     required this.choice,
     required this.selected,
@@ -1225,67 +1225,104 @@ class _TargetChoiceRow extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  State<_TargetChoiceRow> createState() => _TargetChoiceRowState();
+}
+
+class _TargetChoiceRowState extends State<_TargetChoiceRow> {
+  bool _hovered = false;
+
+  void _setHovered(bool value) {
+    if (_hovered == value) {
+      return;
+    }
+    setState(() {
+      _hovered = value;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final l10n = context.cleanDiskL10n;
+    final backgroundColor = widget.selected
+        ? (_hovered
+              ? _ScanColors.selectedSoft.withValues(alpha: 0.94)
+              : _ScanColors.selectedSoft)
+        : (_hovered
+              ? _ScanColors.selectedSoft.withValues(alpha: 0.46)
+              : _ScanColors.innerPanel);
+    final borderColor = _hovered
+        ? _ScanColors.cyan.withValues(alpha: 0.72)
+        : widget.selected
+        ? _ScanColors.cyan
+        : _ScanColors.border;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: Material(
-        color: selected ? _ScanColors.selectedSoft : _ScanColors.innerPanel,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          key: ValueKey('first-run-target-choice-${choice.kind.name}'),
-          onTap: onTap,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => _setHovered(true),
+        onExit: (_) => _setHovered(false),
+        child: Material(
+          color: backgroundColor,
           borderRadius: BorderRadius.circular(8),
-          child: Container(
-            height: 48,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: selected ? _ScanColors.cyan : _ScanColors.border,
+          child: InkWell(
+            key: ValueKey('first-run-target-choice-${widget.choice.kind.name}'),
+            onTap: widget.onTap,
+            mouseCursor: SystemMouseCursors.click,
+            borderRadius: BorderRadius.circular(8),
+            hoverColor: Colors.transparent,
+            splashColor: _ScanColors.cyan.withValues(alpha: 0.12),
+            child: Container(
+              height: 48,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: borderColor),
               ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  _targetChoiceIcon(choice.kind),
-                  color: selected ? _ScanColors.cyan : _ScanColors.blue,
-                  size: 20,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _targetChoiceLabel(l10n, choice),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: _bodyStyle(context).copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        choice.target.path.value,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: _monoStyle(
-                          context,
-                        ).copyWith(color: _ScanColors.textSoft),
-                      ),
-                    ],
+              child: Row(
+                children: [
+                  Icon(
+                    _targetChoiceIcon(widget.choice.kind),
+                    color: widget.selected
+                        ? _ScanColors.cyan
+                        : _ScanColors.blue,
+                    size: 20,
                   ),
-                ),
-                const SizedBox(width: 8),
-                const Icon(
-                  Icons.chevron_right,
-                  color: _ScanColors.textSoft,
-                  size: 18,
-                ),
-              ],
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _targetChoiceLabel(l10n, widget.choice),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _bodyStyle(context).copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.choice.target.path.value,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _monoStyle(
+                            context,
+                          ).copyWith(color: _ScanColors.textSoft),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(
+                    Icons.chevron_right,
+                    color: _ScanColors.textSoft,
+                    size: 18,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -1553,12 +1590,17 @@ class _CompactWorkspace extends StatelessWidget {
             onPickTarget: onPickTarget,
           ),
           const SizedBox(height: 10),
-          _PermissionProofCard(
-            proof: store.runtimeProof,
-            onProbe: onPermissionProbe,
+          if (_shouldShowPermissionProof(
+            store.runtimeProof,
             onRepair: store.canRepairPermission ? onPermissionRepair : null,
-          ),
-          const SizedBox(height: 10),
+          )) ...[
+            _PermissionProofCard(
+              proof: store.runtimeProof,
+              onProbe: onPermissionProbe,
+              onRepair: store.canRepairPermission ? onPermissionRepair : null,
+            ),
+            const SizedBox(height: 10),
+          ],
           if (_shouldShowMetricStrip(store)) ...[
             _MetricStrip(store: store),
             const SizedBox(height: 10),
@@ -1658,52 +1700,55 @@ class _DiskUsageMapPanel extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: GestureDetector(
-                    key: const ValueKey('scan-disk-usage-map-toggle-action'),
-                    behavior: HitTestBehavior.opaque,
-                    onTap: onToggle,
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.grid_view_rounded,
-                          color: _ScanColors.cyan,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                l10n.diskUsageMapTitle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.labelLarge
-                                    ?.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0,
-                                    ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _diskUsageMapSummaryText(
-                                  l10n,
-                                  projection,
-                                  store.diskUsageMapFocusNode,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color: _ScanColors.textSoft,
-                                      letterSpacing: 0,
-                                    ),
-                              ),
-                            ],
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      key: const ValueKey('scan-disk-usage-map-toggle-action'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onToggle,
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.grid_view_rounded,
+                            color: _ScanColors.cyan,
+                            size: 18,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  l10n.diskUsageMapTitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.labelLarge
+                                      ?.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0,
+                                      ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _diskUsageMapSummaryText(
+                                    l10n,
+                                    projection,
+                                    store.diskUsageMapFocusNode,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: _ScanColors.textSoft,
+                                        letterSpacing: 0,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1967,6 +2012,9 @@ class _DiskUsageMapBreadcrumbButton extends StatelessWidget {
           'scan-disk-usage-map-breadcrumb-${item.nodeId?.value ?? 'root'}',
         ),
         onTap: onTap,
+        mouseCursor: onTap == null
+            ? SystemMouseCursors.basic
+            : SystemMouseCursors.click,
         borderRadius: BorderRadius.circular(6),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 220),
@@ -2679,14 +2727,12 @@ class _MetricStrip extends StatelessWidget {
     final scannedItems = store.progress?.scannedItems;
     final isRunning = store.sessionStatus?.state == SessionState.running;
     final totalValue = summary.totalSize == null
-        ? (isRunning ? l10n.metricScanningValue : l10n.metricNoDataValue)
+        ? (isRunning ? _formatBytes(BigInt.zero) : l10n.metricNoDataValue)
         : _formatBytes(summary.totalSize!);
     final totalSubtitle = scannedItems == null
         ? (isRunning ? l10n.metricScanningSubtitle : l10n.metricNoDataValue)
         : '$scannedItems ${l10n.filesCountSuffix}';
-    final largestValue =
-        largest?.name ??
-        (isRunning ? l10n.metricScanningValue : l10n.metricNoDataValue);
+    final largestValue = largest?.name ?? l10n.metricNoDataValue;
     final largestSubtitle = largest == null
         ? (isRunning
               ? l10n.metricScanningLargestSubtitle
@@ -4278,6 +4324,7 @@ class _ChipTargetState extends State<_ChipTarget> {
               ? const ValueKey('scan-target-chip-current')
               : null,
           onTap: widget.onTap,
+          mouseCursor: SystemMouseCursors.click,
           borderRadius: BorderRadius.circular(8),
           focusColor: _ScanColors.cyan.withValues(alpha: 0.10),
           highlightColor: _ScanColors.cyan.withValues(alpha: 0.08),
@@ -5547,6 +5594,7 @@ class _PaneToggleAction extends StatelessWidget {
         child: InkWell(
           key: buttonKey,
           onTap: onTap,
+          mouseCursor: SystemMouseCursors.click,
           borderRadius: BorderRadius.circular(8),
           child: Container(
             width: 38,
@@ -5911,6 +5959,7 @@ class _HeaderTargetMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.cleanDiskL10n;
     final choices = targetChoices.take(6).toList(growable: false);
+    final permissionRepair = canRepairPermission ? onPermissionRepair : null;
 
     return SizedBox(
       key: const ValueKey('scan-target-header-menu'),
@@ -5960,13 +6009,19 @@ class _HeaderTargetMenu extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            _HeaderPermissionLine(
-              proof: runtimeProof,
-              onProbe: onPermissionProbe,
-              onRepair: canRepairPermission ? onPermissionRepair : null,
-            ),
-            const SizedBox(height: 12),
+            if (_shouldShowPermissionProof(
+              runtimeProof,
+              onRepair: permissionRepair,
+            )) ...[
+              const SizedBox(height: 10),
+              _HeaderPermissionLine(
+                proof: runtimeProof,
+                onProbe: onPermissionProbe,
+                onRepair: permissionRepair,
+              ),
+              const SizedBox(height: 12),
+            ] else
+              const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               height: 40,
@@ -6030,7 +6085,7 @@ class _HeaderTargetMenuCurrent extends StatelessWidget {
   }
 }
 
-class _HeaderTargetMenuChoice extends StatelessWidget {
+class _HeaderTargetMenuChoice extends StatefulWidget {
   const _HeaderTargetMenuChoice({
     required this.choice,
     required this.selected,
@@ -6042,58 +6097,107 @@ class _HeaderTargetMenuChoice extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  State<_HeaderTargetMenuChoice> createState() =>
+      _HeaderTargetMenuChoiceState();
+}
+
+class _HeaderTargetMenuChoiceState extends State<_HeaderTargetMenuChoice> {
+  bool _hovered = false;
+
+  void _setHovered(bool value) {
+    if (_hovered == value) {
+      return;
+    }
+    setState(() {
+      _hovered = value;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final l10n = context.cleanDiskL10n;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        key: ValueKey('scan-target-menu-choice-${choice.id}'),
-        onTap: onTap,
+    final backgroundColor = widget.selected
+        ? (_hovered
+              ? _ScanColors.selectedSoft.withValues(alpha: 0.96)
+              : _ScanColors.selectedSoft)
+        : (_hovered
+              ? _ScanColors.selectedSoft.withValues(alpha: 0.42)
+              : Colors.transparent);
+    final borderColor = _hovered
+        ? _ScanColors.cyan.withValues(alpha: 0.56)
+        : Colors.transparent;
+    final foregroundColor = widget.selected || _hovered
+        ? _ScanColors.cyan
+        : _ScanColors.text;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => _setHovered(true),
+      onExit: (_) => _setHovered(false),
+      child: Material(
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(8),
-        child: Container(
-          height: 38,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(
-            color: selected ? _ScanColors.selectedSoft : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                _targetChoiceIcon(choice.kind),
-                color: selected ? _ScanColors.cyan : _ScanColors.textSoft,
-                size: 17,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  _targetChoiceLabel(l10n, choice),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: _bodyStyle(context).copyWith(
-                    color: selected ? _ScanColors.cyan : _ScanColors.text,
-                    fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
-                  ),
+        child: InkWell(
+          key: ValueKey('scan-target-menu-choice-${widget.choice.id}'),
+          onTap: widget.onTap,
+          mouseCursor: SystemMouseCursors.click,
+          borderRadius: BorderRadius.circular(8),
+          hoverColor: Colors.transparent,
+          splashColor: _ScanColors.cyan.withValues(alpha: 0.12),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: borderColor),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _targetChoiceIcon(widget.choice.kind),
+                  color: widget.selected || _hovered
+                      ? _ScanColors.cyan
+                      : _ScanColors.textSoft,
+                  size: 17,
                 ),
-              ),
-              Flexible(
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 150),
-                    child: Text(
-                      choice.target.path.value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.end,
-                      style: _monoStyle(
-                        context,
-                      ).copyWith(color: _ScanColors.textSoft, fontSize: 12),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _targetChoiceLabel(l10n, widget.choice),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _bodyStyle(context).copyWith(
+                      color: foregroundColor,
+                      fontWeight: widget.selected || _hovered
+                          ? FontWeight.w800
+                          : FontWeight.w500,
                     ),
                   ),
                 ),
-              ),
-            ],
+                Flexible(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 150),
+                      child: Text(
+                        widget.choice.target.path.value,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.end,
+                        style: _monoStyle(context).copyWith(
+                          color: _hovered
+                              ? _ScanColors.text
+                              : _ScanColors.textSoft,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -6146,6 +6250,10 @@ class _HeaderPermissionLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!_shouldShowPermissionProof(proof, onRepair: onRepair)) {
+      return const SizedBox.shrink(key: ValueKey('permission-proof-hidden'));
+    }
+
     final l10n = context.cleanDiskL10n;
     final probe = proof.permissionProbe.status;
     final color = _permissionProbeColor(probe);
@@ -6289,6 +6397,7 @@ class _BreadcrumbButtonState extends State<_BreadcrumbButton> {
         child: InkWell(
           key: const ValueKey('scan-target-breadcrumb-action'),
           onTap: widget.onTap,
+          mouseCursor: SystemMouseCursors.click,
           borderRadius: BorderRadius.circular(8),
           focusColor: _ScanColors.cyan.withValues(alpha: 0.10),
           highlightColor: _ScanColors.cyan.withValues(alpha: 0.08),
@@ -6433,9 +6542,27 @@ final class _MetricSummary {
   const _MetricSummary({required this.totalSize, required this.largest});
 
   final BigInt? totalSize;
-  final NodePageItem? largest;
+  final _MetricSummaryItem? largest;
 
   bool get hasData => totalSize != null || largest != null;
+}
+
+final class _MetricSummaryItem {
+  const _MetricSummaryItem({
+    required this.id,
+    required this.parentId,
+    required this.name,
+    required this.kind,
+    required this.size,
+  });
+
+  final String id;
+  final String? parentId;
+  final String name;
+  final NodeKind kind;
+  final SizeFact size;
+
+  BigInt get sizeBytes => size.byteEquivalentBigInt ?? size.rawBigInt;
 }
 
 _MetricSummary _metricSummary(ScanWorkspaceStore store) {
@@ -6443,23 +6570,45 @@ _MetricSummary _metricSummary(ScanWorkspaceStore store) {
   final rootNode = focusedNode ?? store.diskUsageMapRootNode;
   final diskRows = store.diskUsageMapRows;
   if (diskRows.isNotEmpty || rootNode != null) {
-    final positiveRows = _positiveSizeRows(diskRows);
+    final rootSummaryItem = rootNode == null
+        ? null
+        : _metricSummaryItemFromRow(rootNode);
+    final positiveRows = _positiveSummaryItems(
+      diskRows.map(_metricSummaryItemFromRow),
+    );
     final rootSize = rootNode == null ? null : _diskUsageMapSize(rootNode);
     return _MetricSummary(
       totalSize: rootSize != null && rootSize > BigInt.zero
           ? rootSize
-          : _coveredRowsSizeOrNull(positiveRows),
-      largest: _largestSummaryRow(
+          : _coveredSummarySizeOrNull(positiveRows),
+      largest: _largestSummaryItem(
         positiveRows,
-        excludedNodeId: rootNode?.nodeId,
+        excludedIds: rootSummaryItem == null ? const {} : {rootSummaryItem.id},
       ),
     );
   }
 
-  final rows = _positiveSizeRows(_summaryRows(store));
+  final partialRows = store.partialVisibleRows;
+  if (partialRows.isNotEmpty) {
+    final rows = _positiveSummaryItems(
+      partialRows.map(_metricSummaryItemFromPartialRow),
+    );
+    final rootIds = {
+      for (final row in rows)
+        if (row.parentId == null) row.id,
+    };
+    return _MetricSummary(
+      totalSize: _coveredSummarySizeOrNull(rows),
+      largest: _largestSummaryItem(rows, excludedIds: rootIds),
+    );
+  }
+
+  final rows = _positiveSummaryItems(
+    _summaryRows(store).map(_metricSummaryItemFromRow),
+  );
   return _MetricSummary(
-    totalSize: _coveredRowsSizeOrNull(rows),
-    largest: _largestSummaryRow(rows),
+    totalSize: _coveredSummarySizeOrNull(rows),
+    largest: _largestSummaryItem(rows),
   );
 }
 
@@ -6468,49 +6617,95 @@ String? _metricSummarySizeText(ScanWorkspaceStore store) {
   return totalSize == null ? null : _formatBytes(totalSize);
 }
 
-List<NodePageItem> _positiveSizeRows(List<NodePageItem> rows) {
+_MetricSummaryItem _metricSummaryItemFromRow(NodePageItem row) {
+  return _MetricSummaryItem(
+    id: row.nodeId.value,
+    parentId: row.parentId?.value,
+    name: row.name,
+    kind: row.kind,
+    size: row.size,
+  );
+}
+
+_MetricSummaryItem _metricSummaryItemFromPartialRow(PartialNodeItem row) {
+  return _MetricSummaryItem(
+    id: row.nodeId.value,
+    parentId: row.parentId?.value,
+    name: row.name,
+    kind: row.kind,
+    size: row.aggregateSize,
+  );
+}
+
+List<_MetricSummaryItem> _positiveSummaryItems(
+  Iterable<_MetricSummaryItem> rows,
+) {
   return [
     for (final row in rows)
-      if (_diskUsageMapSize(row) > BigInt.zero) row,
+      if (row.sizeBytes > BigInt.zero) row,
   ];
 }
 
-BigInt? _coveredRowsSizeOrNull(List<NodePageItem> rows) {
+BigInt? _coveredSummarySizeOrNull(List<_MetricSummaryItem> rows) {
   if (rows.isEmpty) {
     return null;
   }
   final sortedRows = [...rows]
     ..sort((left, right) {
-      return _diskUsageMapSize(right).compareTo(_diskUsageMapSize(left));
+      return right.sizeBytes.compareTo(left.sizeBytes);
     });
-  return _diskUsageMapCoveredSize(
-    sortedRows,
-    rowById: <NodeId, NodePageItem>{
-      for (final row in sortedRows) row.nodeId: row,
-    },
-  );
+  var total = BigInt.zero;
+  final covered = <String>{};
+  final rowById = {for (final row in sortedRows) row.id: row};
+  for (final row in sortedRows) {
+    if (_hasCoveredMetricAncestor(row, covered, rowById)) {
+      continue;
+    }
+    covered.add(row.id);
+    total += row.sizeBytes;
+  }
+  return total;
 }
 
-NodePageItem? _largestSummaryRow(
-  List<NodePageItem> rows, {
-  NodeId? excludedNodeId,
+bool _hasCoveredMetricAncestor(
+  _MetricSummaryItem row,
+  Set<String> covered,
+  Map<String, _MetricSummaryItem> rowById,
+) {
+  var parentId = row.parentId;
+  final visited = <String>{row.id};
+  while (parentId != null && visited.add(parentId)) {
+    if (covered.contains(parentId)) {
+      return true;
+    }
+    parentId = rowById[parentId]?.parentId;
+  }
+  return false;
+}
+
+_MetricSummaryItem? _largestSummaryItem(
+  List<_MetricSummaryItem> rows, {
+  Set<String> excludedIds = const {},
 }) {
-  final candidates = [
-    for (final row in rows)
-      if (row.nodeId != excludedNodeId && _diskUsageMapSize(row) > BigInt.zero)
-        row,
-  ];
-  if (candidates.isEmpty) {
+  if (rows.isEmpty) {
     return null;
   }
+  final candidates = [
+    for (final row in rows)
+      if (!excludedIds.contains(row.id) && row.sizeBytes > BigInt.zero) row,
+  ];
+  if (candidates.isEmpty && excludedIds.isEmpty) {
+    return null;
+  }
+  final effectiveCandidates = candidates.isEmpty ? rows : candidates;
 
   final directories = [
-    for (final row in candidates)
+    for (final row in effectiveCandidates)
       if (row.kind == NodeKind.directory) row,
   ];
-  final pool = directories.isEmpty ? candidates : directories;
+  final pool = directories.isEmpty ? effectiveCandidates : directories;
   pool.sort((left, right) {
-    return _diskUsageMapSize(right).compareTo(_diskUsageMapSize(left));
+    return right.sizeBytes.compareTo(left.sizeBytes);
   });
   return pool.first;
 }
@@ -6907,7 +7102,7 @@ String _progressItemsText(
 }) {
   final scannedItems = progress?.scannedItems;
   if (scannedItems == null) {
-    return isRunning ? l10n.metricScanningValue : l10n.metricNoDataValue;
+    return isRunning ? '0' : l10n.metricNoDataValue;
   }
   return scannedItems.toString();
 }
@@ -6919,7 +7114,7 @@ String _progressElapsedText(
 }) {
   final elapsedMs = progress?.elapsedMs;
   if (elapsedMs == null) {
-    return isRunning ? l10n.metricScanningValue : l10n.metricNoDataValue;
+    return isRunning ? _formatElapsed(BigInt.zero) : l10n.metricNoDataValue;
   }
   return _formatElapsed(elapsedMs);
 }
@@ -6930,7 +7125,9 @@ String _progressThroughputText(
   required bool isRunning,
 }) {
   if (progress == null) {
-    return isRunning ? l10n.metricScanningValue : l10n.metricNoDataValue;
+    return isRunning
+        ? '0 ${l10n.progressItemsPerSecondSuffix}'
+        : l10n.metricNoDataValue;
   }
   final bytesPerSecond = progress.throughputBytesPerSec;
   if (bytesPerSecond != null) {
@@ -6939,13 +7136,17 @@ String _progressThroughputText(
 
   final elapsedMs = progress.elapsedMs;
   if (elapsedMs == null || elapsedMs <= BigInt.zero) {
-    return isRunning ? l10n.metricScanningValue : l10n.metricNoDataValue;
+    return isRunning
+        ? '0 ${l10n.progressItemsPerSecondSuffix}'
+        : l10n.metricNoDataValue;
   }
 
   final itemsPerSecond =
       progress.scannedItems.toDouble() / (elapsedMs.toDouble() / 1000);
   if (!itemsPerSecond.isFinite || itemsPerSecond <= 0) {
-    return isRunning ? l10n.metricScanningValue : l10n.metricNoDataValue;
+    return isRunning
+        ? '0 ${l10n.progressItemsPerSecondSuffix}'
+        : l10n.metricNoDataValue;
   }
 
   return '${_formatRate(itemsPerSecond)} ${l10n.progressItemsPerSecondSuffix}';
@@ -7657,6 +7858,21 @@ bool _shouldUseCompactPermissionProof(
   }
   return proof.permissionProbe.status == PermissionProbeStatus.verified &&
       (warning == null || warning.compact);
+}
+
+bool _shouldShowPermissionProof(
+  RuntimeProof proof, {
+  required VoidCallback? onRepair,
+}) {
+  if (onRepair != null) {
+    return true;
+  }
+  return !_hasConfirmedPermissionAccess(proof);
+}
+
+bool _hasConfirmedPermissionAccess(RuntimeProof proof) {
+  return proof.permissionProbe.status == PermissionProbeStatus.verified &&
+      proof.permissionProbe.requiredAction == PermissionRequiredAction.none;
 }
 
 _PermissionWarningData? _permissionWarningData(

@@ -65,6 +65,11 @@ class AppButton extends StatelessWidget {
       foregroundColor: WidgetStatePropertyAll(style.foregroundColor),
       backgroundColor: WidgetStatePropertyAll(style.backgroundColor),
       side: WidgetStatePropertyAll(BorderSide(color: style.borderColor)),
+      mouseCursor: WidgetStateProperty.resolveWith<MouseCursor?>((states) {
+        return states.contains(WidgetState.disabled)
+            ? SystemMouseCursors.basic
+            : SystemMouseCursors.click;
+      }),
       shape: WidgetStatePropertyAll(
         RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
