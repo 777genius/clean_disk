@@ -2811,17 +2811,23 @@ class _DetailsPane extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    details.summary.name,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleLarge
-                                        ?.copyWith(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: 0,
-                                        ),
+                                  Tooltip(
+                                    message: details.summary.name,
+                                    child: Text(
+                                      details.summary.name,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      softWrap: true,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge
+                                          ?.copyWith(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0,
+                                            height: 1.05,
+                                          ),
+                                    ),
                                   ),
                                   Text(
                                     l10n.detailsItemsCount(
@@ -2834,6 +2840,7 @@ class _DetailsPane extends StatelessWidget {
                                 ],
                               ),
                             ),
+                            const SizedBox(width: 10),
                             Text(
                               _formatSize(details.summary.size),
                               style: Theme.of(context).textTheme.titleMedium
@@ -2861,6 +2868,7 @@ class _DetailsPane extends StatelessWidget {
                         _DetailLine(
                           label: l10n.detailsPathLabel,
                           value: displayPath ?? details.summary.name,
+                          valueMaxLines: 2,
                         ),
                         _DetailLine(
                           label: l10n.detailsCreatedLabel,
@@ -2942,13 +2950,13 @@ class _DetailsPane extends StatelessWidget {
                                     ? Icons.check_circle_outline
                                     : movedToTrash
                                     ? Icons.delete_outline
-                                    : Icons.add_circle_outline,
+                                    : Icons.delete_outline,
                                 label: movedToTrash
                                     ? l10n.movedToTrashRowLabel
                                     : alreadyQueued
                                     ? l10n.reviewAddedAction
                                     : l10n.addToQueueAction,
-                                accent: movedToTrash
+                                accent: movedToTrash || !alreadyQueued
                                     ? _ScanColors.pink
                                     : _ScanColors.cyan,
                                 onTap: alreadyQueued || movedToTrash
@@ -5316,15 +5324,20 @@ class _OutlinedAction extends StatelessWidget {
 }
 
 class _DetailLine extends StatelessWidget {
-  const _DetailLine({required this.label, required this.value});
+  const _DetailLine({
+    required this.label,
+    required this.value,
+    this.valueMaxLines = 1,
+  });
 
   final String label;
   final String value;
+  final int valueMaxLines;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 36,
+      height: valueMaxLines > 1 ? 50 : 36,
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: _ScanColors.border)),
       ),
@@ -5346,9 +5359,10 @@ class _DetailLine extends StatelessWidget {
               message: value,
               child: Text(
                 value,
-                maxLines: 1,
+                maxLines: valueMaxLines,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.end,
+                softWrap: valueMaxLines > 1,
                 style: _monoStyle(context).copyWith(color: _ScanColors.text),
               ),
             ),
@@ -6578,7 +6592,7 @@ String _displayPathForSelection({
   required ScanTarget target,
   required NodePageItem selected,
 }) {
-  final parts = _visibleTreePathParts(store, selected.nodeId);
+  final parts = _knownTreePathParts(store, selected.nodeId);
   if (parts.isEmpty) {
     return _joinDisplayPath(target.path.value, ['...', selected.name]);
   }
@@ -6586,6 +6600,47 @@ String _displayPathForSelection({
     target.path.value,
     _pathPartsRelativeToTarget(target.path.value, parts),
   );
+}
+
+List<String> _knownTreePathParts(ScanWorkspaceStore store, NodeId nodeId) {
+  final visibleParts = _visibleTreePathParts(store, nodeId);
+  if (visibleParts.isNotEmpty) {
+    return visibleParts;
+  }
+
+  final rowsById = <NodeId, NodePageItem>{};
+  for (final row in store.visibleTreeRows) {
+    rowsById[row.item.nodeId] = row.item;
+  }
+  for (final row in store.visibleRows) {
+    rowsById.putIfAbsent(row.nodeId, () => row);
+  }
+  for (final row in store.diskUsageMapRows) {
+    rowsById.putIfAbsent(row.nodeId, () => row);
+  }
+
+  final selected = rowsById[nodeId];
+  if (selected == null) {
+    return const [];
+  }
+
+  final parts = <String>[];
+  var current = selected;
+  final treeRootParentId = store.viewport.parentId;
+  final visited = <NodeId>{};
+  while (visited.add(current.nodeId)) {
+    parts.add(current.name);
+    final parentId = current.parentId;
+    if (parentId == null || parentId == treeRootParentId) {
+      break;
+    }
+    final parent = rowsById[parentId];
+    if (parent == null) {
+      return const [];
+    }
+    current = parent;
+  }
+  return parts.reversed.toList(growable: false);
 }
 
 List<String> _visibleTreePathParts(ScanWorkspaceStore store, NodeId nodeId) {

@@ -220,10 +220,10 @@ class CleanDiskLocalizationsEn extends CleanDiskLocalizations {
 
   @override
   String get revealUnavailableDisplayPath =>
-      'Full path is not available for this row. Expand from the tree root to reveal it.';
+      'Reveal is unavailable for a shortened path. Expand the folders in the tree to select the exact file or folder.';
 
   @override
-  String get addToQueueAction => 'Add to review';
+  String get addToQueueAction => 'Queue for Trash';
 
   @override
   String get reviewAddedAction => 'In review';

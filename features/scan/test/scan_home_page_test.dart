@@ -1115,6 +1115,55 @@ void main() {
     expect(find.text('0 items'), findsOneWidget);
   });
 
+  testWidgets('details pane keeps long names and known paths readable', (
+    tester,
+  ) async {
+    final revealer = _RecordingPathRevealer();
+    await _pumpScanHome(
+      tester,
+      size: const Size(1440, 900),
+      pathRevealer: revealer,
+    );
+
+    await _tapScanAction(tester);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('app-tree-table-row-2')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('app-tree-table-row-3')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('app-tree-table-row-4')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('app-tree-table-row-6')));
+    await tester.pumpAndSettle();
+
+    final detailTitle = tester.widget<Text>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Text &&
+            widget.data == 'Application Support' &&
+            widget.maxLines == 2,
+      ),
+    );
+    expect(detailTitle.overflow, TextOverflow.ellipsis);
+    expect(find.byTooltip('Application Support'), findsOneWidget);
+    expect(
+      find.byTooltip('/Users/belief/Library/Application Support'),
+      findsWidgets,
+    );
+    expect(
+      find.byKey(const ValueKey('details-reveal-unavailable-hint')),
+      findsNothing,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('details-reveal-action')));
+    await tester.pumpAndSettle();
+
+    expect(
+      revealer.paths.single.value,
+      '/Users/belief/Library/Application Support',
+    );
+  });
+
   testWidgets('details reveal is disabled for shortened display paths', (
     tester,
   ) async {
@@ -1137,6 +1186,12 @@ void main() {
 
     expect(
       find.byKey(const ValueKey('details-reveal-unavailable-hint')),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'Reveal is unavailable for a shortened path. Expand the folders in the tree to select the exact file or folder.',
+      ),
       findsOneWidget,
     );
     final revealButton = tester.widget<OutlinedButton>(
@@ -1908,7 +1963,7 @@ void main() {
       findsNothing,
     );
 
-    await tester.tap(find.text('Add to review'));
+    await tester.tap(find.text('Queue for Trash'));
     await tester.pumpAndSettle();
 
     expect(find.text('In review'), findsOneWidget);
@@ -2006,7 +2061,7 @@ void main() {
 
     await _tapScanAction(tester);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Add to review'));
+    await tester.tap(find.text('Queue for Trash'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(
       find.byKey(const ValueKey('cleanup-preview-trash-action')),
