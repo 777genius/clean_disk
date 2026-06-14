@@ -1316,6 +1316,54 @@ void main() {
     );
   });
 
+  testWidgets('picked fake Windows volume does not reuse previous scan rows', (
+    tester,
+  ) async {
+    final picker = _RecordingScanTargetPicker(ScanTargetPath('H:\\'));
+    final result = await _pumpScanHome(
+      tester,
+      size: const Size(1440, 900),
+      config: const ScanWorkspaceConfig(
+        defaultTargetPath: '/Users/belief',
+        requiresInitialTargetSelection: false,
+      ),
+      targetPicker: picker,
+    );
+
+    await _tapScanAction(tester);
+    await tester.pumpAndSettle();
+
+    expect(
+      result.store.visibleRows.map((row) => row.name),
+      containsAll(<String>['Library', 'Downloads']),
+    );
+
+    await _openTargetMenu(tester);
+    await tester.tap(
+      find.byKey(const ValueKey('scan-target-menu-open-picker-action')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('H:\\'), findsOneWidget);
+    expect(result.store.visibleRows, isEmpty);
+
+    await _openTargetMenu(tester);
+    await tester.tap(
+      find.byKey(const ValueKey('scan-target-menu-scan-action')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      result.fixture.repository.lastStartCommand?.targets.single.path.value,
+      'H:\\',
+    );
+    expect(result.store.visibleRows, isEmpty);
+    expect(
+      result.store.primaryRootNodeId,
+      FakeScanRepository.syntheticTargetRootNodeId,
+    );
+  });
+
   testWidgets('wide header target menu exposes saved target actions', (
     tester,
   ) async {
