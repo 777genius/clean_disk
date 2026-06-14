@@ -433,6 +433,10 @@ final class ScanWorkspaceStore with Store {
     return List.unmodifiable([focused, ...descendants]);
   }
 
+  List<NodePageItem> get diskUsageMapAllRows {
+    return List<NodePageItem>.unmodifiable(_diskUsageMapRows);
+  }
+
   NodePageItem? get diskUsageMapFocusNode {
     final focusNodeId = _diskUsageMapFocusNodeId.value;
     if (focusNodeId == null) {
@@ -1244,10 +1248,16 @@ final class ScanWorkspaceStore with Store {
   }
 
   void toggleDiskUsageMapFocus(NodeId nodeId) {
+    final nextNodeId = _diskUsageMapFocusNodeId.value == nodeId ? null : nodeId;
+    setDiskUsageMapFocus(nextNodeId);
+  }
+
+  void setDiskUsageMapFocus(NodeId? nodeId) {
+    if (_diskUsageMapFocusNodeId.value == nodeId) {
+      return;
+    }
     runInAction(() {
-      _diskUsageMapFocusNodeId.value = _diskUsageMapFocusNodeId.value == nodeId
-          ? null
-          : nodeId;
+      _diskUsageMapFocusNodeId.value = nodeId;
     });
     _notifyChanged();
   }

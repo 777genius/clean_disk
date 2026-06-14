@@ -121,6 +121,12 @@ class AppTreeTable extends StatefulWidget {
     required this.rows,
     required this.emptyState,
     required this.style,
+    this.title,
+    this.subtitle,
+    this.collapsed = false,
+    this.expandTooltip,
+    this.collapseTooltip,
+    this.onToggleCollapsed,
     this.showHeader = true,
     this.onRowTap,
     this.onRowToggleExpansion,
@@ -133,6 +139,12 @@ class AppTreeTable extends StatefulWidget {
   final List<AppTreeTableRow> rows;
   final Widget emptyState;
   final AppTreeTableStyle style;
+  final String? title;
+  final String? subtitle;
+  final bool collapsed;
+  final String? expandTooltip;
+  final String? collapseTooltip;
+  final VoidCallback? onToggleCollapsed;
   final bool showHeader;
   final ValueChanged<AppTreeTableRow>? onRowTap;
   final ValueChanged<AppTreeTableRow>? onRowToggleExpansion;
@@ -264,16 +276,53 @@ class _AppTreeTableState extends State<AppTreeTable> {
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          if (widget.showHeader)
-            _AppTreeTableHeader(columns: widget.columns, style: widget.style),
-          if (widget.rowsScrollable)
-            Expanded(child: body)
-          else
-            SizedBox(height: _contentRowsHeight(), child: body),
+          if (_hasPanelHeader)
+            _AppTreeTablePanelHeader(
+              title: widget.title,
+              subtitle: widget.subtitle,
+              collapsed: widget.collapsed,
+              expandTooltip: widget.expandTooltip,
+              collapseTooltip: widget.collapseTooltip,
+              onToggleCollapsed: widget.onToggleCollapsed,
+              style: widget.style,
+            ),
+          if (widget.rowsScrollable) ...[
+            if (!widget.collapsed) ...[
+              if (widget.showHeader)
+                _AppTreeTableHeader(
+                  columns: widget.columns,
+                  style: widget.style,
+                ),
+              Expanded(child: body),
+            ],
+          ] else
+            AnimatedSize(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: widget.collapsed
+                  ? const SizedBox.shrink()
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (widget.showHeader)
+                          _AppTreeTableHeader(
+                            columns: widget.columns,
+                            style: widget.style,
+                          ),
+                        SizedBox(height: _contentRowsHeight(), child: body),
+                      ],
+                    ),
+            ),
         ],
       ),
     );
   }
+
+  bool get _hasPanelHeader =>
+      widget.title != null ||
+      widget.subtitle != null ||
+      widget.onToggleCollapsed != null;
 
   double _contentRowsHeight() {
     if (widget.rows.isEmpty) {
@@ -385,7 +434,10 @@ class _AppTreeTableHeader extends StatelessWidget {
           ),
           Expanded(
             flex: style.percentFlex,
-            child: _HeaderText(columns.percent, style: style),
+            child: Padding(
+              padding: const EdgeInsets.only(left: 12),
+              child: _HeaderText(columns.percent, style: style),
+            ),
           ),
           Expanded(
             flex: style.itemsFlex,
@@ -394,6 +446,98 @@ class _AppTreeTableHeader extends StatelessWidget {
               child: _HeaderText(columns.items, style: style),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AppTreeTablePanelHeader extends StatelessWidget {
+  const _AppTreeTablePanelHeader({
+    required this.title,
+    required this.subtitle,
+    required this.collapsed,
+    required this.expandTooltip,
+    required this.collapseTooltip,
+    required this.onToggleCollapsed,
+    required this.style,
+  });
+
+  final String? title;
+  final String? subtitle;
+  final bool collapsed;
+  final String? expandTooltip;
+  final String? collapseTooltip;
+  final VoidCallback? onToggleCollapsed;
+  final AppTreeTableStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    final toggleTooltip = collapsed ? expandTooltip : collapseTooltip;
+
+    return Container(
+      key: const ValueKey('app-tree-table-panel-header'),
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      decoration: BoxDecoration(
+        color: style.backgroundColor,
+        border: Border(bottom: BorderSide(color: style.rowBorderColor)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.account_tree_outlined,
+            color: style.selectedProgressColor,
+            size: 18,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onToggleCollapsed,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (title != null)
+                    Text(
+                      title!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _bodyStyle(context).copyWith(
+                        color: style.textColor,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _bodyStyle(
+                        context,
+                      ).copyWith(color: style.mutedTextColor),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          if (onToggleCollapsed != null)
+            IconButton(
+              key: const ValueKey('app-tree-table-collapse-action'),
+              tooltip: toggleTooltip,
+              onPressed: onToggleCollapsed,
+              color: style.mutedTextColor,
+              iconSize: 24,
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+              icon: Icon(
+                collapsed
+                    ? Icons.keyboard_arrow_down_rounded
+                    : Icons.keyboard_arrow_up_rounded,
+              ),
+            ),
         ],
       ),
     );
@@ -516,22 +660,22 @@ class _AppTreeTableRowTile extends StatelessWidget {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          SizedBox(
-                            width: 20,
-                            child: row.loading
-                                ? Center(
-                                    child: SizedBox(
-                                      width: 14,
-                                      height: 14,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: style.selectedProgressColor,
-                                      ),
-                                    ),
-                                  )
-                                : null,
-                          ),
-                          const SizedBox(width: 6),
+                          if (row.loading) ...[
+                            SizedBox(
+                              width: 20,
+                              child: Center(
+                                child: SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: style.selectedProgressColor,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
                           Flexible(
                             child: Text(
                               row.sizeText,
@@ -546,36 +690,51 @@ class _AppTreeTableRowTile extends StatelessWidget {
                     ),
                     Expanded(
                       flex: style.percentFlex,
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: LinearProgressIndicator(
-                                value: row.progress.clamp(0.0, 1.0),
-                                minHeight: 6,
-                                backgroundColor: style.progressTrackColor,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  row.selected
-                                      ? style.selectedProgressColor
-                                      : style.progressColor,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 12),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final showProgressBar = constraints.maxWidth >= 80;
+                            return Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                if (showProgressBar) ...[
+                                  Expanded(
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: LinearProgressIndicator(
+                                        value: row.progress.clamp(0.0, 1.0),
+                                        minHeight: 6,
+                                        backgroundColor:
+                                            style.progressTrackColor,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              row.selected
+                                                  ? style.selectedProgressColor
+                                                  : style.progressColor,
+                                            ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 56,
+                                  ),
+                                  child: Text(
+                                    row.percentText,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    overflow: TextOverflow.clip,
+                                    textAlign: TextAlign.end,
+                                    style: _monoStyle(context, style),
+                                  ),
                                 ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 56,
-                            child: Text(
-                              row.percentText,
-                              maxLines: 1,
-                              softWrap: false,
-                              overflow: TextOverflow.clip,
-                              textAlign: TextAlign.end,
-                              style: _monoStyle(context, style),
-                            ),
-                          ),
-                        ],
+                              ],
+                            );
+                          },
+                        ),
                       ),
                     ),
                     Expanded(

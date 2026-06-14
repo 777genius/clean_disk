@@ -114,6 +114,47 @@ void main() {
     expect(loaderRect.right, lessThanOrEqualTo(sizeRect.left));
   });
 
+  testWidgets('keeps size text separated from row progress bar', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark(),
+        home: const Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 140,
+            child: AppTreeTable(
+              columns: columns,
+              rows: [
+                AppTreeTableRow(
+                  id: '1',
+                  name: 'Users',
+                  sizeText: '196.7 GB',
+                  percentText: '100.0%',
+                  itemsText: '1',
+                  progress: 1,
+                  depth: 0,
+                  selected: true,
+                  hasChildren: true,
+                  expanded: false,
+                  icon: Icons.folder_outlined,
+                ),
+              ],
+              emptyState: Text('Empty'),
+              style: style,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final sizeRect = tester.getRect(find.text('196.7 GB'));
+    final progressRect = tester.getRect(find.byType(LinearProgressIndicator));
+
+    expect(progressRect.left - sizeRect.right, greaterThanOrEqualTo(10));
+  });
+
   testWidgets('can hide header for empty first-run states', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -137,6 +178,69 @@ void main() {
     expect(find.text('Name'), findsNothing);
     expect(find.text('Size'), findsNothing);
     expect(find.text('Empty'), findsOneWidget);
+  });
+
+  testWidgets('can collapse panel content behind a compact header', (
+    tester,
+  ) async {
+    var collapsed = true;
+    late StateSetter setState;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark(),
+        home: Scaffold(
+          body: SizedBox(
+            width: 720,
+            child: StatefulBuilder(
+              builder: (context, updateState) {
+                setState = updateState;
+                return AppTreeTable(
+                  title: 'Contents',
+                  subtitle: 'C: - 1 item',
+                  collapsed: collapsed,
+                  expandTooltip: 'Expand contents list',
+                  collapseTooltip: 'Collapse contents list',
+                  onToggleCollapsed: () {
+                    setState(() {
+                      collapsed = !collapsed;
+                    });
+                  },
+                  columns: columns,
+                  rows: const [
+                    AppTreeTableRow(
+                      id: '1',
+                      name: 'System',
+                      sizeText: '462.8 GB',
+                      percentText: '100%',
+                      itemsText: '8',
+                      progress: 1,
+                      depth: 0,
+                      selected: false,
+                      hasChildren: true,
+                      expanded: false,
+                      icon: Icons.folder_outlined,
+                    ),
+                  ],
+                  emptyState: Text('Empty'),
+                  style: style,
+                  rowsScrollable: false,
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Contents'), findsOneWidget);
+    expect(find.text('System'), findsNothing);
+
+    await tester.tap(find.byTooltip('Expand contents list'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('System'), findsOneWidget);
+    expect(find.byTooltip('Collapse contents list'), findsOneWidget);
   });
 
   testWidgets('can size rows to content for page-level scrolling', (

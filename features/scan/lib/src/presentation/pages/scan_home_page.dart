@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:clean_disk_design_system/clean_disk_design_system.dart';
 import 'package:clean_disk_localization/clean_disk_localization.dart';
@@ -42,11 +43,15 @@ class _ScanHomePageState extends State<ScanHomePage> {
   var _isLoadingSnapshotRows = false;
   var _targetHydrated = false;
   var _targetChooserVisible = false;
+  var _aiPaneCollapsed = false;
   var _detailsPaneCollapsed = false;
   var _diskUsageMapCollapsed = false;
+  var _nodeTableCollapsed = false;
   var _uiRefreshScheduled = false;
+  var _scanFeedbackActive = false;
   var _searchSequence = 0;
   var _lastSubmittedSearchText = '';
+  Timer? _scanFeedbackTimer;
 
   @override
   void initState() {
@@ -65,6 +70,7 @@ class _ScanHomePageState extends State<ScanHomePage> {
   @override
   void dispose() {
     _searchDebounceTimer?.cancel();
+    _scanFeedbackTimer?.cancel();
     _stopPendingSnapshotLoadPolling();
     _searchFocusNode.dispose();
     _searchController.dispose();
@@ -101,15 +107,20 @@ class _ScanHomePageState extends State<ScanHomePage> {
           searchController: _searchController,
           searchFocusNode: _searchFocusNode,
           canScan: _canRunScan,
+          scanFeedbackActive: _scanFeedbackActive,
           showTargetChooser: _targetChooserVisible,
+          aiPaneCollapsed: _aiPaneCollapsed,
           detailsPaneCollapsed: _detailsPaneCollapsed,
           diskUsageMapRenderer: widget.diskUsageMapRenderer,
           diskUsageMapCollapsed: _diskUsageMapCollapsed,
+          nodeTableCollapsed: _nodeTableCollapsed,
           onScan: _canRunScan ? () => _startScan(widget.store) : null,
           onPause: () => _cancelScan(widget.store),
           onPickTarget: () => unawaited(_pickScanTarget(widget.store)),
           onToggleDetailsPane: _toggleDetailsPane,
+          onToggleAiPane: _toggleAiPane,
           onToggleDiskUsageMap: _toggleDiskUsageMap,
+          onToggleNodeTable: _toggleNodeTable,
           onChooseTarget: (choice) =>
               unawaited(_selectScanTarget(widget.store, choice.target)),
           onChooseFolderTarget: () =>
@@ -148,7 +159,22 @@ class _ScanHomePageState extends State<ScanHomePage> {
     });
   }
 
+  void _toggleNodeTable() {
+    setState(() {
+      _nodeTableCollapsed = !_nodeTableCollapsed;
+    });
+  }
+
+  void _toggleAiPane() {
+    setState(() {
+      _aiPaneCollapsed = !_aiPaneCollapsed;
+    });
+  }
+
   bool get _canRunScan {
+    if (_scanFeedbackActive) {
+      return false;
+    }
     if (widget.store.sessionStatus?.state == SessionState.running) {
       return false;
     }
@@ -197,6 +223,7 @@ class _ScanHomePageState extends State<ScanHomePage> {
     }
 
     _commandSequence += 1;
+    _beginScanFeedback();
     _resetSearchState();
     _lastAutoLoadedSessionId = null;
     _lastAutoLoadedSnapshotId = null;
@@ -210,6 +237,21 @@ class _ScanHomePageState extends State<ScanHomePage> {
     _markStoreChanged();
     _pendingSnapshotLoadSessionId = store.sessionId;
     _schedulePendingSnapshotLoad(store);
+  }
+
+  void _beginScanFeedback() {
+    _scanFeedbackTimer?.cancel();
+    setState(() {
+      _scanFeedbackActive = true;
+    });
+    _scanFeedbackTimer = Timer(const Duration(milliseconds: 1200), () {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _scanFeedbackActive = false;
+      });
+    });
   }
 
   Future<void> _loadPendingSnapshotRows(ScanWorkspaceStore store) async {
@@ -808,15 +850,20 @@ class ScanWorkspaceView extends StatelessWidget {
     required this.searchController,
     required this.searchFocusNode,
     required this.canScan,
+    required this.scanFeedbackActive,
     required this.showTargetChooser,
+    required this.aiPaneCollapsed,
     required this.detailsPaneCollapsed,
     required this.diskUsageMapCollapsed,
+    required this.nodeTableCollapsed,
     this.diskUsageMapRenderer,
     required this.onScan,
     required this.onPause,
     required this.onPickTarget,
+    required this.onToggleAiPane,
     required this.onToggleDetailsPane,
     required this.onToggleDiskUsageMap,
+    required this.onToggleNodeTable,
     required this.onChooseTarget,
     required this.onChooseFolderTarget,
     required this.onPermissionProbe,
@@ -837,15 +884,20 @@ class ScanWorkspaceView extends StatelessWidget {
   final TextEditingController searchController;
   final FocusNode searchFocusNode;
   final bool canScan;
+  final bool scanFeedbackActive;
   final bool showTargetChooser;
+  final bool aiPaneCollapsed;
   final bool detailsPaneCollapsed;
   final bool diskUsageMapCollapsed;
+  final bool nodeTableCollapsed;
   final DiskUsageMapRenderer? diskUsageMapRenderer;
   final VoidCallback? onScan;
   final VoidCallback onPause;
   final VoidCallback onPickTarget;
+  final VoidCallback onToggleAiPane;
   final VoidCallback onToggleDetailsPane;
   final VoidCallback onToggleDiskUsageMap;
+  final VoidCallback onToggleNodeTable;
   final ValueChanged<ScanTargetChoice> onChooseTarget;
   final VoidCallback onChooseFolderTarget;
   final VoidCallback onPermissionProbe;
@@ -862,7 +914,7 @@ class ScanWorkspaceView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.cleanDiskL10n;
-    final scanActionLabel = _scanActionLabel(l10n, store);
+    final scanActionLabel = _scanActionLabel(l10n, store, scanFeedbackActive);
 
     return AppScaffold(
       body: Stack(
@@ -876,21 +928,29 @@ class ScanWorkspaceView extends StatelessWidget {
                   children: [
                     _TopBar(
                       compact: compact,
-                      statusText: _statusText(l10n, store),
+                      statusText: _statusText(l10n, store, scanFeedbackActive),
                       searchController: searchController,
                       searchFocusNode: searchFocusNode,
                       currentSort: store.viewport.sort,
                       queryMode: store.viewport.mode,
                       activeTarget: activeTarget,
+                      targetChoices: store.targetChoices,
+                      isLoadingTargetChoices: store.isLoadingTargetChoices,
+                      runtimeProof: store.runtimeProof,
                       scanActionLabel: scanActionLabel,
                       canSearch: store.hasReadableSnapshot,
                       canSort: store.visibleRows.isNotEmpty,
                       canPickTarget:
                           store.canPickScanTarget &&
                           store.sessionStatus?.state != SessionState.running,
+                      canRepairPermission: store.canRepairPermission,
                       canScan: canScan,
                       onScan: onScan,
                       onPickTarget: onPickTarget,
+                      onChooseTarget: onChooseTarget,
+                      onChooseFolderTarget: onChooseFolderTarget,
+                      onPermissionProbe: onPermissionProbe,
+                      onPermissionRepair: onPermissionRepair,
                       onPause: onPause,
                       canCancelScan: store.canCancelScan,
                       onSearchChanged: onSearchChanged,
@@ -915,24 +975,25 @@ class ScanWorkspaceView extends StatelessWidget {
                               diskUsageMapRenderer: diskUsageMapRenderer,
                               diskUsageMapCollapsed: diskUsageMapCollapsed,
                               onToggleDiskUsageMap: onToggleDiskUsageMap,
+                              nodeTableCollapsed: nodeTableCollapsed,
+                              onToggleNodeTable: onToggleNodeTable,
                             )
                           : _WideWorkspace(
                               store: store,
                               activeTarget: activeTarget,
-                              canChangeTarget: canChangeTarget,
                               onScan: onScan,
-                              onPickTarget: onPickTarget,
-                              onPermissionProbe: onPermissionProbe,
-                              onPermissionRepair: onPermissionRepair,
                               onRefreshCleanupPreview: onRefreshCleanupPreview,
                               onExecuteCleanup: onExecuteCleanup,
                               onRefreshFolderTarget: onRefreshFolderTarget,
                               onClearSearch: onClearSearch,
                               onStoreChanged: onStoreChanged,
-                              onChooseTarget: onChooseTarget,
                               diskUsageMapRenderer: diskUsageMapRenderer,
                               diskUsageMapCollapsed: diskUsageMapCollapsed,
                               onToggleDiskUsageMap: onToggleDiskUsageMap,
+                              nodeTableCollapsed: nodeTableCollapsed,
+                              onToggleNodeTable: onToggleNodeTable,
+                              aiPaneCollapsed: aiPaneCollapsed,
+                              onToggleAiPane: onToggleAiPane,
                               detailsPaneCollapsed: detailsPaneCollapsed,
                               onToggleDetailsPane: onToggleDetailsPane,
                             ),
@@ -955,7 +1016,14 @@ class ScanWorkspaceView extends StatelessWidget {
     );
   }
 
-  String _statusText(CleanDiskLocalizations l10n, ScanWorkspaceStore store) {
+  String _statusText(
+    CleanDiskLocalizations l10n,
+    ScanWorkspaceStore store,
+    bool scanFeedbackActive,
+  ) {
+    if (scanFeedbackActive) {
+      return l10n.scanRunningStatus;
+    }
     return switch (store.daemonAvailability) {
       ScanDaemonAvailability.offline => l10n.scanOfflineStatus,
       ScanDaemonAvailability.incompatible => l10n.scanIncompatibleStatus,
@@ -970,7 +1038,11 @@ class ScanWorkspaceView extends StatelessWidget {
   String _scanActionLabel(
     CleanDiskLocalizations l10n,
     ScanWorkspaceStore store,
+    bool scanFeedbackActive,
   ) {
+    if (scanFeedbackActive) {
+      return l10n.scanRunningStatus;
+    }
     return switch (store.sessionStatus?.state) {
       SessionState.running => l10n.scanRunningStatus,
       SessionState.completed => l10n.scanAgainAction,
@@ -1226,44 +1298,43 @@ class _WideWorkspace extends StatefulWidget {
   const _WideWorkspace({
     required this.store,
     required this.activeTarget,
-    required this.canChangeTarget,
     required this.onScan,
-    required this.onPickTarget,
-    required this.onPermissionProbe,
-    required this.onPermissionRepair,
     required this.onRefreshCleanupPreview,
     required this.onExecuteCleanup,
     required this.onRefreshFolderTarget,
     required this.onClearSearch,
     required this.onStoreChanged,
-    required this.onChooseTarget,
     required this.diskUsageMapRenderer,
     required this.diskUsageMapCollapsed,
     required this.onToggleDiskUsageMap,
+    required this.nodeTableCollapsed,
+    required this.onToggleNodeTable,
+    required this.aiPaneCollapsed,
+    required this.onToggleAiPane,
     required this.detailsPaneCollapsed,
     required this.onToggleDetailsPane,
   });
 
-  static const _targetRailWidth = 292.0;
+  static const _assistantRailWidth = 340.0;
+  static const _collapsedAssistantRailWidth = 52.0;
   static const _detailsPaneWidth = 380.0;
   static const _collapsedDetailsPaneWidth = 52.0;
 
   final ScanWorkspaceStore store;
   final ScanTarget activeTarget;
-  final bool canChangeTarget;
   final VoidCallback? onScan;
-  final VoidCallback onPickTarget;
-  final VoidCallback onPermissionProbe;
-  final VoidCallback onPermissionRepair;
   final VoidCallback onRefreshCleanupPreview;
   final VoidCallback onExecuteCleanup;
   final ValueChanged<ScanTarget> onRefreshFolderTarget;
   final VoidCallback onClearSearch;
   final VoidCallback onStoreChanged;
-  final ValueChanged<ScanTargetChoice> onChooseTarget;
   final DiskUsageMapRenderer? diskUsageMapRenderer;
   final bool diskUsageMapCollapsed;
   final VoidCallback onToggleDiskUsageMap;
+  final bool nodeTableCollapsed;
+  final VoidCallback onToggleNodeTable;
+  final bool aiPaneCollapsed;
+  final VoidCallback onToggleAiPane;
   final bool detailsPaneCollapsed;
   final VoidCallback onToggleDetailsPane;
 
@@ -1288,61 +1359,85 @@ class _WideWorkspaceState extends State<_WideWorkspace> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          key: const ValueKey('scan-target-rail'),
-          width: _WideWorkspace._targetRailWidth,
-          child: _TargetRail(
-            store: widget.store,
-            activeTarget: widget.activeTarget,
-            canChangeTarget: widget.canChangeTarget,
-            onPickTarget: widget.onPickTarget,
-            onChooseTarget: widget.onChooseTarget,
-            onPermissionProbe: widget.onPermissionProbe,
-            onPermissionRepair: widget.onPermissionRepair,
+        AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.centerLeft,
+          child: SizedBox(
+            key: const ValueKey('scan-ai-rail'),
+            width: widget.aiPaneCollapsed
+                ? _WideWorkspace._collapsedAssistantRailWidth
+                : _WideWorkspace._assistantRailWidth,
+            child: ClipRect(
+              child: widget.aiPaneCollapsed
+                  ? _CollapsedAiRail(onExpand: widget.onToggleAiPane)
+                  : _AiAssistantRail(
+                      store: widget.store,
+                      activeTarget: widget.activeTarget,
+                      onScan: widget.onScan,
+                      onCollapse: widget.onToggleAiPane,
+                    ),
+            ),
           ),
         ),
         const _Divider.vertical(),
         Expanded(
-          child: Scrollbar(
-            controller: _scrollController,
-            notificationPredicate: (notification) => notification.depth == 0,
-            child: SingleChildScrollView(
-              controller: _scrollController,
-              padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
-              child: Column(
-                children: [
-                  if (_shouldShowMetricStrip(widget.store)) ...[
-                    _MetricStrip(store: widget.store),
-                    const SizedBox(height: 8),
-                  ],
-                  if (_shouldShowDiskUsageMap(
-                    widget.store,
-                    widget.diskUsageMapRenderer,
-                  )) ...[
-                    _DiskUsageMapPanel(
-                      store: widget.store,
-                      activeTarget: widget.activeTarget,
-                      renderer: widget.diskUsageMapRenderer!,
-                      collapsed: widget.diskUsageMapCollapsed,
-                      compact: false,
-                      onToggle: widget.onToggleDiskUsageMap,
-                      onStoreChanged: widget.onStoreChanged,
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  _NodeTable(
-                    store: widget.store,
-                    activeTarget: widget.activeTarget,
-                    onScan: widget.onScan,
-                    showEmptyScanAction: false,
-                    onRefreshFolderTarget: widget.onRefreshFolderTarget,
-                    onClearSearch: widget.onClearSearch,
-                    onStoreChanged: widget.onStoreChanged,
-                    rowsScrollable: false,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final showMetricStrip = _shouldShowMetricStrip(widget.store);
+              final showDiskUsageMap = _shouldShowDiskUsageMap(
+                widget.store,
+                widget.diskUsageMapRenderer,
+              );
+              final diskUsageMapHeight = _wideDiskUsageMapHeight(
+                viewportHeight: constraints.maxHeight,
+                metricStripVisible: showMetricStrip,
+                nodeTableCollapsed: widget.nodeTableCollapsed,
+              );
+
+              return Scrollbar(
+                controller: _scrollController,
+                notificationPredicate: (notification) =>
+                    notification.depth == 0,
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+                  child: Column(
+                    children: [
+                      if (showMetricStrip) ...[
+                        _MetricStrip(store: widget.store),
+                        const SizedBox(height: 8),
+                      ],
+                      if (showDiskUsageMap) ...[
+                        _DiskUsageMapPanel(
+                          store: widget.store,
+                          activeTarget: widget.activeTarget,
+                          renderer: widget.diskUsageMapRenderer!,
+                          collapsed: widget.diskUsageMapCollapsed,
+                          compact: false,
+                          height: diskUsageMapHeight,
+                          onToggle: widget.onToggleDiskUsageMap,
+                          onStoreChanged: widget.onStoreChanged,
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      _NodeTable(
+                        store: widget.store,
+                        activeTarget: widget.activeTarget,
+                        onScan: widget.onScan,
+                        showEmptyScanAction: false,
+                        onRefreshFolderTarget: widget.onRefreshFolderTarget,
+                        onClearSearch: widget.onClearSearch,
+                        onStoreChanged: widget.onStoreChanged,
+                        collapsed: widget.nodeTableCollapsed,
+                        onToggleCollapsed: widget.onToggleNodeTable,
+                        rowsScrollable: false,
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
         ),
         if (showDetailsPane) ...[
@@ -1377,6 +1472,33 @@ class _WideWorkspaceState extends State<_WideWorkspace> {
   }
 }
 
+double _wideDiskUsageMapHeight({
+  required double viewportHeight,
+  required bool metricStripVisible,
+  required bool nodeTableCollapsed,
+}) {
+  const defaultHeight = 260.0;
+  if (!nodeTableCollapsed || !viewportHeight.isFinite) {
+    return defaultHeight;
+  }
+
+  const viewportVerticalPadding = 22.0;
+  const sectionGap = 8.0;
+  const metricStripHeight = 64.0;
+  const diskUsageMapChromeHeight = 114.0;
+  const collapsedNodeTableHeight = 92.0;
+  final reservedHeight =
+      viewportVerticalPadding +
+      sectionGap +
+      diskUsageMapChromeHeight +
+      collapsedNodeTableHeight +
+      (metricStripVisible ? metricStripHeight + sectionGap : 0);
+
+  return (viewportHeight - reservedHeight)
+      .clamp(defaultHeight, double.infinity)
+      .toDouble();
+}
+
 class _CompactWorkspace extends StatelessWidget {
   const _CompactWorkspace({
     required this.store,
@@ -1394,6 +1516,8 @@ class _CompactWorkspace extends StatelessWidget {
     required this.diskUsageMapRenderer,
     required this.diskUsageMapCollapsed,
     required this.onToggleDiskUsageMap,
+    required this.nodeTableCollapsed,
+    required this.onToggleNodeTable,
   });
 
   final ScanWorkspaceStore store;
@@ -1411,6 +1535,8 @@ class _CompactWorkspace extends StatelessWidget {
   final DiskUsageMapRenderer? diskUsageMapRenderer;
   final bool diskUsageMapCollapsed;
   final VoidCallback onToggleDiskUsageMap;
+  final bool nodeTableCollapsed;
+  final VoidCallback onToggleNodeTable;
 
   @override
   Widget build(BuildContext context) {
@@ -1457,6 +1583,8 @@ class _CompactWorkspace extends StatelessWidget {
             onRefreshFolderTarget: onRefreshFolderTarget,
             onClearSearch: onClearSearch,
             onStoreChanged: onStoreChanged,
+            collapsed: nodeTableCollapsed,
+            onToggleCollapsed: onToggleNodeTable,
             rowsScrollable: false,
           ),
           if (showDetailsPane) ...[
@@ -1482,6 +1610,7 @@ class _DiskUsageMapPanel extends StatelessWidget {
     required this.renderer,
     required this.collapsed,
     required this.compact,
+    this.height,
     required this.onToggle,
     required this.onStoreChanged,
   });
@@ -1491,6 +1620,7 @@ class _DiskUsageMapPanel extends StatelessWidget {
   final DiskUsageMapRenderer renderer;
   final bool collapsed;
   final bool compact;
+  final double? height;
   final VoidCallback onToggle;
   final VoidCallback onStoreChanged;
 
@@ -1509,6 +1639,13 @@ class _DiskUsageMapPanel extends StatelessWidget {
     final toggleLabel = collapsed
         ? l10n.diskUsageMapExpandAction
         : l10n.diskUsageMapCollapseAction;
+    final breadcrumbItems = _diskUsageMapBreadcrumbItems(
+      store: store,
+      activeTarget: activeTarget,
+    );
+    final parentBreadcrumbNodeId = _diskUsageMapParentBreadcrumbNodeId(
+      breadcrumbItems,
+    );
 
     return Container(
       key: const ValueKey('scan-disk-usage-map-panel'),
@@ -1596,29 +1733,54 @@ class _DiskUsageMapPanel extends StatelessWidget {
             curve: Curves.easeOutCubic,
             child: collapsed
                 ? const SizedBox.shrink()
-                : Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-                    child: SizedBox(
-                      height: compact ? 220 : 260,
-                      child: DiskUsageMapView(
-                        projection: projection,
-                        renderer: renderer,
-                        labels: _diskUsageMapLabels(l10n),
-                        style: _diskUsageMapStyle,
-                        selectedNodeId: store.selectedNodeId?.value,
-                        focusedNodeId: store.diskUsageMapFocusNodeId?.value,
-                        onTileSelected: (tile) =>
-                            _selectDiskUsageMapTile(tile, store),
-                        onTileActivated: (tile) =>
-                            _selectDiskUsageMapTile(tile, store),
-                        dataFallbackMaxItems: compact ? 8 : 12,
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _DiskUsageMapBreadcrumbTrail(
+                        items: breadcrumbItems,
+                        backTooltip: l10n.diskUsageMapBackAction,
+                        canGoBack: parentBreadcrumbNodeId != null,
+                        onBack: () => _selectDiskUsageMapBreadcrumb(
+                          parentBreadcrumbNodeId,
+                          store,
+                        ),
+                        onSelect: (nodeId) =>
+                            _selectDiskUsageMapBreadcrumb(nodeId, store),
                       ),
-                    ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: height ?? (compact ? 220 : 260),
+                          child: DiskUsageMapView(
+                            projection: projection,
+                            renderer: renderer,
+                            labels: _diskUsageMapLabels(l10n),
+                            style: _diskUsageMapStyle,
+                            selectedNodeId: store.selectedNodeId?.value,
+                            focusedNodeId: store.diskUsageMapFocusNodeId?.value,
+                            onTileSelected: (tile) =>
+                                _selectDiskUsageMapTile(tile, store),
+                            onTileActivated: (tile) =>
+                                _selectDiskUsageMapTile(tile, store),
+                            dataFallbackMaxItems: compact ? 8 : 12,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
           ),
         ],
       ),
     );
+  }
+
+  void _selectDiskUsageMapBreadcrumb(NodeId? nodeId, ScanWorkspaceStore store) {
+    store.setDiskUsageMapFocus(nodeId);
+    if (nodeId == null) {
+      return;
+    }
+    unawaited(store.selectNode(nodeId).whenComplete(onStoreChanged));
   }
 
   void _selectDiskUsageMapTile(
@@ -1635,6 +1797,197 @@ class _DiskUsageMapPanel extends StatelessWidget {
   }
 }
 
+class _DiskUsageMapBreadcrumbTrail extends StatefulWidget {
+  const _DiskUsageMapBreadcrumbTrail({
+    required this.items,
+    required this.backTooltip,
+    required this.canGoBack,
+    required this.onBack,
+    required this.onSelect,
+  });
+
+  final List<_DiskUsageMapBreadcrumbItem> items;
+  final String backTooltip;
+  final bool canGoBack;
+  final VoidCallback onBack;
+  final ValueChanged<NodeId?> onSelect;
+
+  @override
+  State<_DiskUsageMapBreadcrumbTrail> createState() =>
+      _DiskUsageMapBreadcrumbTrailState();
+}
+
+class _DiskUsageMapBreadcrumbTrailState
+    extends State<_DiskUsageMapBreadcrumbTrail> {
+  final _scrollController = ScrollController();
+  String? _lastPathSignature;
+
+  @override
+  void initState() {
+    super.initState();
+    _lastPathSignature = _pathSignature(widget.items);
+    _scrollToCurrentPathEnd();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DiskUsageMapBreadcrumbTrail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final signature = _pathSignature(widget.items);
+    if (signature == _lastPathSignature) {
+      return;
+    }
+    _lastPathSignature = signature;
+    _scrollToCurrentPathEnd();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToCurrentPathEnd() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) {
+        return;
+      }
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      key: const ValueKey('scan-disk-usage-map-breadcrumb-trail'),
+      padding: const EdgeInsets.fromLTRB(10, 0, 8, 8),
+      child: Row(
+        children: [
+          IconButton(
+            key: const ValueKey('scan-disk-usage-map-back-action'),
+            tooltip: widget.backTooltip,
+            onPressed: widget.canGoBack ? widget.onBack : null,
+            color: _ScanColors.textSoft,
+            disabledColor: _ScanColors.textSoft.withAlpha(90),
+            iconSize: 18,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+            icon: const Icon(Icons.arrow_back_rounded),
+          ),
+          const SizedBox(width: 2),
+          Expanded(
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context).copyWith(
+                dragDevices: {
+                  PointerDeviceKind.touch,
+                  PointerDeviceKind.mouse,
+                  PointerDeviceKind.trackpad,
+                  PointerDeviceKind.stylus,
+                  PointerDeviceKind.invertedStylus,
+                },
+              ),
+              child: Scrollbar(
+                controller: _scrollController,
+                thumbVisibility: true,
+                trackVisibility: false,
+                interactive: true,
+                thickness: 3,
+                radius: const Radius.circular(999),
+                notificationPredicate: (notification) =>
+                    notification.metrics.axis == Axis.horizontal,
+                child: SingleChildScrollView(
+                  key: const ValueKey('scan-disk-usage-map-breadcrumb-scroll'),
+                  controller: _scrollController,
+                  scrollDirection: Axis.horizontal,
+                  physics: const ClampingScrollPhysics(),
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      for (
+                        var index = 0;
+                        index < widget.items.length;
+                        index += 1
+                      ) ...[
+                        if (index > 0)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 2),
+                            child: Icon(
+                              Icons.chevron_right_rounded,
+                              color: _ScanColors.textSoft,
+                              size: 16,
+                            ),
+                          ),
+                        _DiskUsageMapBreadcrumbButton(
+                          item: widget.items[index],
+                          onTap: widget.items[index].selected
+                              ? null
+                              : () =>
+                                    widget.onSelect(widget.items[index].nodeId),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _pathSignature(List<_DiskUsageMapBreadcrumbItem> items) {
+    return items
+        .map((item) => '${item.nodeId?.value ?? 'root'}:${item.label}')
+        .join('/');
+  }
+}
+
+class _DiskUsageMapBreadcrumbButton extends StatelessWidget {
+  const _DiskUsageMapBreadcrumbButton({
+    required this.item,
+    required this.onTap,
+  });
+
+  final _DiskUsageMapBreadcrumbItem item;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = item.selected ? _ScanColors.cyan : _ScanColors.textSoft;
+    return Tooltip(
+      message: item.label,
+      waitDuration: const Duration(milliseconds: 450),
+      child: InkWell(
+        key: ValueKey(
+          'scan-disk-usage-map-breadcrumb-${item.nodeId?.value ?? 'root'}',
+        ),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 220),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+            child: Text(
+              item.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _bodyStyle(context).copyWith(
+                color: color,
+                fontWeight: item.selected ? FontWeight.w800 : FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _TopBar extends StatelessWidget {
   const _TopBar({
     required this.compact,
@@ -1644,13 +1997,21 @@ class _TopBar extends StatelessWidget {
     required this.currentSort,
     required this.queryMode,
     required this.activeTarget,
+    required this.targetChoices,
+    required this.isLoadingTargetChoices,
+    required this.runtimeProof,
     required this.scanActionLabel,
     required this.canSearch,
     required this.canSort,
     required this.canPickTarget,
+    required this.canRepairPermission,
     required this.canScan,
     required this.onScan,
     required this.onPickTarget,
+    required this.onChooseTarget,
+    required this.onChooseFolderTarget,
+    required this.onPermissionProbe,
+    required this.onPermissionRepair,
     required this.onPause,
     required this.canCancelScan,
     required this.onSearchChanged,
@@ -1665,13 +2026,21 @@ class _TopBar extends StatelessWidget {
   final ChildSort currentSort;
   final ScanQueryMode queryMode;
   final ScanTarget activeTarget;
+  final List<ScanTargetChoice> targetChoices;
+  final bool isLoadingTargetChoices;
+  final RuntimeProof runtimeProof;
   final String scanActionLabel;
   final bool canSearch;
   final bool canSort;
   final bool canPickTarget;
+  final bool canRepairPermission;
   final bool canScan;
   final VoidCallback? onScan;
   final VoidCallback onPickTarget;
+  final ValueChanged<ScanTargetChoice> onChooseTarget;
+  final VoidCallback onChooseFolderTarget;
+  final VoidCallback onPermissionProbe;
+  final VoidCallback onPermissionRepair;
   final VoidCallback onPause;
   final bool canCancelScan;
   final ValueChanged<String> onSearchChanged;
@@ -1758,9 +2127,21 @@ class _TopBar extends StatelessWidget {
                 const _WindowChromeInset(compact: false),
                 const _AppTitle(),
                 const SizedBox(width: 18),
-                _Breadcrumb(
-                  target: activeTarget,
-                  onTap: canPickTarget ? onPickTarget : null,
+                _HeaderTargetPicker(
+                  activeTarget: activeTarget,
+                  targetChoices: targetChoices,
+                  isLoadingTargetChoices: isLoadingTargetChoices,
+                  runtimeProof: runtimeProof,
+                  scanActionLabel: scanActionLabel,
+                  canPickTarget: canPickTarget,
+                  canScan: canScan,
+                  canRepairPermission: canRepairPermission,
+                  onPickTarget: onPickTarget,
+                  onChooseTarget: onChooseTarget,
+                  onChooseFolderTarget: onChooseFolderTarget,
+                  onPermissionProbe: onPermissionProbe,
+                  onPermissionRepair: onPermissionRepair,
+                  onScan: onScan,
                 ),
                 const SizedBox(width: 16),
                 _PrimaryActionButton(
@@ -1871,77 +2252,394 @@ class _WideToolbarTrailingActions extends StatelessWidget {
   }
 }
 
-class _TargetRail extends StatelessWidget {
-  const _TargetRail({
+class _AiAssistantRail extends StatelessWidget {
+  const _AiAssistantRail({
     required this.store,
     required this.activeTarget,
-    required this.canChangeTarget,
-    required this.onPickTarget,
-    required this.onChooseTarget,
-    required this.onPermissionProbe,
-    required this.onPermissionRepair,
+    required this.onScan,
+    required this.onCollapse,
   });
 
   final ScanWorkspaceStore store;
   final ScanTarget activeTarget;
-  final bool canChangeTarget;
-  final VoidCallback onPickTarget;
-  final ValueChanged<ScanTargetChoice> onChooseTarget;
-  final VoidCallback onPermissionProbe;
-  final VoidCallback onPermissionRepair;
+  final VoidCallback? onScan;
+  final VoidCallback onCollapse;
 
   @override
   Widget build(BuildContext context) {
-    final choices = _railTargetChoices(store.targetChoices, activeTarget);
-    final canChoosePresetTarget =
-        store.sessionStatus?.state != SessionState.running;
+    final l10n = context.cleanDiskL10n;
+    final summary = _metricSummary(store);
+    final selected = store.selectedDetails?.summary;
+    final focusName =
+        selected?.name ??
+        summary.largest?.name ??
+        _targetDisplayName(activeTarget);
+    final focusSize = selected == null
+        ? (summary.largest == null
+              ? (_metricSummarySizeText(store) ?? l10n.metricNoDataValue)
+              : _formatSize(summary.largest!.size))
+        : _formatSize(selected.size);
+    final isRunning = store.sessionStatus?.state == SessionState.running;
+    final statusText = isRunning
+        ? l10n.aiStatusScanning
+        : store.hasReadableSnapshot
+        ? l10n.aiStatusReady
+        : l10n.aiStatusRunScanFirst;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 18, 14, 14),
-      child: SingleChildScrollView(
-        child: SizedBox(
-          width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: _ScanColors.cyan.withAlpha(18),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome,
+                  color: _ScanColors.cyan,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.aiAssistantTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _titleStyle(context),
+                    ),
+                    Text(
+                      l10n.aiAssistantSubtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _bodyStyle(
+                        context,
+                      ).copyWith(color: _ScanColors.textSoft),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              _PaneToggleAction(
+                buttonKey: const ValueKey('scan-ai-collapse-action'),
+                icon: Icons.keyboard_double_arrow_left,
+                iconColor: _ScanColors.cyan,
+                tooltip: l10n.aiAssistantTitle,
+                onTap: onCollapse,
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          _AiFocusSummary(
+            title: focusName,
+            subtitle: focusSize,
+            status: statusText,
+          ),
+          const SizedBox(height: 16),
+          _SectionCaption(l10n.aiHistorySection.toUpperCase()),
+          const SizedBox(height: 10),
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                _AiMessageBubble(
+                  author: l10n.aiAuthorAssistant,
+                  text: l10n.aiIntroMessage,
+                ),
+                const SizedBox(height: 8),
+                _AiMessageBubble(
+                  author: l10n.aiAuthorUser,
+                  text: l10n.aiUserStarterMessage,
+                  user: true,
+                ),
+                const SizedBox(height: 8),
+                _AiMessageBubble(
+                  author: l10n.aiAuthorAssistant,
+                  text: store.hasReadableSnapshot
+                      ? l10n.aiSnapshotAdvice(focusName: focusName)
+                      : l10n.aiNoSnapshotAdvice,
+                ),
+                const SizedBox(height: 12),
+                _AiQuickHint(
+                  icon: Icons.rule_folder_outlined,
+                  title: l10n.aiSafeModeTitle,
+                  text: l10n.aiSafeModeText,
+                ),
+                const SizedBox(height: 8),
+                _AiQuickHint(
+                  icon: Icons.history,
+                  title: l10n.aiDialogMemoryTitle,
+                  text: l10n.aiDialogMemoryText,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            key: const ValueKey('scan-ai-chat-input'),
+            height: 42,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: _ScanColors.input,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.chat_bubble_outline,
+                  color: _ScanColors.cyan,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    l10n.aiAskPlaceholder,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _bodyStyle(
+                      context,
+                    ).copyWith(color: _ScanColors.textSoft),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!store.hasReadableSnapshot && onScan != null) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 38,
+              child: FilledButton.icon(
+                onPressed: onScan,
+                icon: const Icon(Icons.play_arrow, size: 18),
+                label: Text(l10n.scanAction),
+                style: FilledButton.styleFrom(
+                  backgroundColor: _ScanColors.cyan,
+                  foregroundColor: _ScanColors.onPrimary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CollapsedAiRail extends StatelessWidget {
+  const _CollapsedAiRail({required this.onExpand});
+
+  final VoidCallback onExpand;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.cleanDiskL10n;
+
+    return Container(
+      key: const ValueKey('scan-ai-collapsed-rail'),
+      width: _WideWorkspace._collapsedAssistantRailWidth,
+      color: _ScanColors.background,
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        children: [
+          _PaneToggleAction(
+            buttonKey: const ValueKey('scan-ai-expand-action'),
+            icon: Icons.keyboard_double_arrow_right,
+            tooltip: l10n.aiAssistantTitle,
+            onTap: onExpand,
+          ),
+          const SizedBox(height: 8),
+          _PaneToggleAction(
+            buttonKey: const ValueKey('scan-ai-indicator-action'),
+            icon: Icons.auto_awesome,
+            iconColor: _ScanColors.cyan,
+            tooltip: l10n.aiAssistantTitle,
+            onTap: onExpand,
+          ),
+          const SizedBox(height: 14),
+          RotatedBox(
+            quarterTurns: 3,
+            child: Text(
+              'AI',
+              maxLines: 1,
+              style: _titleStyle(context).copyWith(
+                color: _ScanColors.cyan,
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const Spacer(),
+          Icon(
+            Icons.chat_bubble_outline,
+            color: _ScanColors.textSoft.withValues(alpha: 0.72),
+            size: 18,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AiFocusSummary extends StatelessWidget {
+  const _AiFocusSummary({
+    required this.title,
+    required this.subtitle,
+    required this.status,
+  });
+
+  final String title;
+  final String subtitle;
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('scan-ai-focus-summary'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: const BoxDecoration(
+        border: Border(
+          top: BorderSide(color: _ScanColors.border),
+          bottom: BorderSide(color: _ScanColors.border),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.saved_search, color: _ScanColors.violet, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _bodyStyle(
+                    context,
+                  ).copyWith(color: Colors.white, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$subtitle - $status',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: _bodyStyle(
+                    context,
+                  ).copyWith(color: _ScanColors.textSoft, height: 1.2),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AiMessageBubble extends StatelessWidget {
+  const _AiMessageBubble({
+    required this.author,
+    required this.text,
+    this.user = false,
+  });
+
+  final String author;
+  final String text;
+  final bool user;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = user ? _ScanColors.blue : _ScanColors.cyan;
+    return Align(
+      alignment: user ? Alignment.centerRight : Alignment.centerLeft,
+      child: FractionallySizedBox(
+        widthFactor: user ? 0.86 : 1,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+          decoration: BoxDecoration(
+            color: user
+                ? _ScanColors.selectedSoft.withAlpha(160)
+                : _ScanColors.innerPanel,
+            borderRadius: BorderRadius.circular(8),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _TargetItem(
-                itemKey: const ValueKey('scan-target-current'),
-                actionKey: const ValueKey('scan-target-picker-action'),
-                icon: Icons.folder_open_outlined,
-                label: _targetDisplayName(activeTarget),
-                size: _metricSummarySizeText(store),
-                selected: true,
-                onTap: canChangeTarget ? onPickTarget : null,
+              Text(
+                author,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: accent,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0,
+                ),
               ),
-              if (choices.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                for (final choice in choices)
-                  _TargetItem(
-                    itemKey: ValueKey('scan-target-choice-${choice.id}'),
-                    actionKey: ValueKey(
-                      'scan-target-choice-action-${choice.id}',
-                    ),
-                    icon: _targetChoiceIcon(choice.kind),
-                    label: _targetChoiceLabel(context.cleanDiskL10n, choice),
-                    selected: false,
-                    onTap: canChoosePresetTarget
-                        ? () => onChooseTarget(choice)
-                        : null,
-                  ),
-              ],
-              const SizedBox(height: 12),
-              _PermissionProofCard(
-                proof: store.runtimeProof,
-                onProbe: onPermissionProbe,
-                onRepair: store.canRepairPermission ? onPermissionRepair : null,
+              const SizedBox(height: 3),
+              Text(
+                text,
+                style: _bodyStyle(
+                  context,
+                ).copyWith(color: _ScanColors.text, height: 1.25),
               ),
-              if (_shouldShowMetricStrip(store)) ...[
-                const SizedBox(height: 12),
-                _DriveSummary(store: store, target: activeTarget),
-              ],
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _AiQuickHint extends StatelessWidget {
+  const _AiQuickHint({
+    required this.icon,
+    required this.title,
+    required this.text,
+  });
+
+  final IconData icon;
+  final String title;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: _ScanColors.textSoft, size: 17),
+        const SizedBox(width: 8),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: _bodyStyle(
+                context,
+              ).copyWith(color: _ScanColors.textSoft, height: 1.22),
+              children: [
+                TextSpan(
+                  text: '$title: ',
+                  style: const TextStyle(
+                    color: _ScanColors.text,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                TextSpan(text: text),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -2047,6 +2745,8 @@ class _NodeTable extends StatelessWidget {
     required this.onRefreshFolderTarget,
     required this.onClearSearch,
     required this.onStoreChanged,
+    required this.collapsed,
+    required this.onToggleCollapsed,
     this.rowsScrollable = true,
   });
 
@@ -2057,6 +2757,8 @@ class _NodeTable extends StatelessWidget {
   final ValueChanged<ScanTarget> onRefreshFolderTarget;
   final VoidCallback onClearSearch;
   final VoidCallback onStoreChanged;
+  final bool collapsed;
+  final VoidCallback onToggleCollapsed;
   final bool rowsScrollable;
 
   @override
@@ -2094,6 +2796,7 @@ class _NodeTable extends StatelessWidget {
         ? null
         : _tableState(l10n: l10n, store: store, issueCount: _issueCount(rows));
     final queryBanner = _queryModeBanner(l10n, store);
+    final showTableHeader = tableRows.isNotEmpty || queryBanner != null;
 
     return Column(
       children: [
@@ -2115,6 +2818,7 @@ class _NodeTable extends StatelessWidget {
               showPartialRows || store.viewport.mode == ScanQueryMode.children,
           allowContextMenu: !showPartialRows,
           queryBanner: queryBanner,
+          showTableHeader: showTableHeader,
         ),
         if (!showPartialRows && store.canLoadMoreVisibleTreeRows) ...[
           const SizedBox(height: 8),
@@ -2138,8 +2842,17 @@ class _NodeTable extends StatelessWidget {
     required bool allowExpansion,
     required bool allowContextMenu,
     required _RowsStateContent? queryBanner,
+    required bool showTableHeader,
   }) {
     final table = AppTreeTable(
+      title: showTableHeader ? l10n.nodeTableTitle : null,
+      subtitle: showTableHeader
+          ? '${_targetDisplayName(activeTarget)} - ${l10n.detailsItemsCount(count: tableRows.length)}'
+          : null,
+      collapsed: showTableHeader && collapsed,
+      expandTooltip: l10n.nodeTableExpandAction,
+      collapseTooltip: l10n.nodeTableCollapseAction,
+      onToggleCollapsed: showTableHeader ? onToggleCollapsed : null,
       columns: AppTreeTableColumnLabels(
         name: l10n.nameColumn,
         size: l10n.sizeColumn,
@@ -2408,17 +3121,23 @@ class _DetailsPane extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    details.summary.name,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleLarge
-                                        ?.copyWith(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: 0,
-                                        ),
+                                  Tooltip(
+                                    message: details.summary.name,
+                                    child: Text(
+                                      details.summary.name,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      softWrap: true,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge
+                                          ?.copyWith(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0,
+                                            height: 1.05,
+                                          ),
+                                    ),
                                   ),
                                   Text(
                                     l10n.detailsItemsCount(
@@ -2431,6 +3150,7 @@ class _DetailsPane extends StatelessWidget {
                                 ],
                               ),
                             ),
+                            const SizedBox(width: 10),
                             Text(
                               _formatSize(details.summary.size),
                               style: Theme.of(context).textTheme.titleMedium
@@ -2458,6 +3178,7 @@ class _DetailsPane extends StatelessWidget {
                         _DetailLine(
                           label: l10n.detailsPathLabel,
                           value: displayPath ?? details.summary.name,
+                          valueMaxLines: 2,
                         ),
                         _DetailLine(
                           label: l10n.detailsCreatedLabel,
@@ -2539,13 +3260,13 @@ class _DetailsPane extends StatelessWidget {
                                     ? Icons.check_circle_outline
                                     : movedToTrash
                                     ? Icons.delete_outline
-                                    : Icons.add_circle_outline,
+                                    : Icons.delete_outline,
                                 label: movedToTrash
                                     ? l10n.movedToTrashRowLabel
                                     : alreadyQueued
                                     ? l10n.reviewAddedAction
                                     : l10n.addToQueueAction,
-                                accent: movedToTrash
+                                accent: movedToTrash || !alreadyQueued
                                     ? _ScanColors.pink
                                     : _ScanColors.cyan,
                                 onTap: alreadyQueued || movedToTrash
@@ -2622,7 +3343,13 @@ class _CollapsedDetailsRail extends StatelessWidget {
             onTap: onExpand,
           ),
           const SizedBox(height: 8),
-          const Icon(Icons.info_outline, color: _ScanColors.violet, size: 20),
+          _PaneToggleAction(
+            buttonKey: const ValueKey('details-pane-info-action'),
+            icon: Icons.info_outline,
+            iconColor: _ScanColors.violet,
+            tooltip: l10n.detailsTitle,
+            onTap: onExpand,
+          ),
         ],
       ),
     );
@@ -3457,115 +4184,6 @@ class _MetricCell extends StatelessWidget {
   }
 }
 
-class _TargetItem extends StatefulWidget {
-  const _TargetItem({
-    required this.itemKey,
-    required this.icon,
-    required this.label,
-    this.actionKey,
-    this.size,
-    this.selected = false,
-    this.onTap,
-  });
-
-  final Key itemKey;
-  final Key? actionKey;
-  final IconData icon;
-  final String label;
-  final String? size;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  @override
-  State<_TargetItem> createState() => _TargetItemState();
-}
-
-class _TargetItemState extends State<_TargetItem> {
-  bool _hovered = false;
-
-  void _setHovered(bool value) {
-    if (_hovered == value) {
-      return;
-    }
-    setState(() {
-      _hovered = value;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isInteractive = widget.onTap != null;
-    final backgroundColor = widget.selected
-        ? (_hovered && isInteractive
-              ? _ScanColors.selectedSoft.withValues(alpha: 0.92)
-              : _ScanColors.selectedSoft)
-        : (_hovered && isInteractive
-              ? _ScanColors.selectedSoft.withValues(alpha: 0.52)
-              : Colors.transparent);
-    final borderColor = _hovered && isInteractive
-        ? _ScanColors.cyan.withValues(alpha: 0.58)
-        : _ScanColors.border;
-    final content = Container(
-      key: widget.itemKey,
-      height: 42,
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(8),
-        border: widget.selected || (_hovered && isInteractive)
-            ? Border.all(color: borderColor)
-            : null,
-      ),
-      child: Row(
-        children: [
-          Icon(
-            widget.icon,
-            size: 22,
-            color: widget.selected ? _ScanColors.cyan : Colors.white,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              widget.label,
-              overflow: TextOverflow.ellipsis,
-              style: _bodyStyle(
-                context,
-              ).copyWith(color: Colors.white, fontWeight: FontWeight.w700),
-            ),
-          ),
-          if (widget.size case final size?) ...[
-            const SizedBox(width: 8),
-            Text(size, style: _monoStyle(context)),
-          ],
-        ],
-      ),
-    );
-    if (!isInteractive) {
-      return content;
-    }
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => _setHovered(true),
-      onExit: (_) => _setHovered(false),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          key: widget.actionKey,
-          onTap: widget.onTap,
-          borderRadius: BorderRadius.circular(8),
-          focusColor: _ScanColors.cyan.withValues(alpha: 0.10),
-          highlightColor: _ScanColors.cyan.withValues(alpha: 0.08),
-          hoverColor: Colors.transparent,
-          splashColor: _ScanColors.cyan.withValues(alpha: 0.12),
-          child: content,
-        ),
-      ),
-    );
-  }
-}
-
 class _ChipTarget extends StatefulWidget {
   const _ChipTarget({
     required this.icon,
@@ -3667,63 +4285,6 @@ class _ChipTargetState extends State<_ChipTarget> {
           splashColor: _ScanColors.cyan.withValues(alpha: 0.12),
           child: content,
         ),
-      ),
-    );
-  }
-}
-
-class _DriveSummary extends StatelessWidget {
-  const _DriveSummary({required this.store, required this.target});
-
-  final ScanWorkspaceStore store;
-  final ScanTarget target;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.cleanDiskL10n;
-    final isRunning = store.sessionStatus?.state == SessionState.running;
-    final sizeText =
-        _metricSummarySizeText(store) ??
-        (isRunning ? l10n.metricScanningValue : l10n.metricNoDataValue);
-    return Container(
-      key: const ValueKey('scan-drive-summary'),
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: _panelDecoration,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            _targetDisplayName(target),
-            style: _bodyStyle(context).copyWith(color: Colors.white),
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: LinearProgressIndicator(
-              value: store.hasReadableSnapshot ? 1 : 0,
-              minHeight: 7,
-              backgroundColor: _ScanColors.progressTrack,
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                _ScanColors.violet,
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            sizeText,
-            style: _monoStyle(context).copyWith(color: _ScanColors.textSoft),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            target.path.value,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: _bodyStyle(
-              context,
-            ).copyWith(color: _ScanColors.cyan, fontWeight: FontWeight.w800),
-          ),
-        ],
       ),
     );
   }
@@ -4967,12 +5528,14 @@ class _PaneToggleAction extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.onTap,
+    this.iconColor = Colors.white,
   });
 
   final Key buttonKey;
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
+  final Color iconColor;
 
   @override
   Widget build(BuildContext context) {
@@ -4993,7 +5556,7 @@ class _PaneToggleAction extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: _ScanColors.border),
             ),
-            child: Icon(icon, size: 20, color: Colors.white),
+            child: Icon(icon, size: 20, color: iconColor),
           ),
         ),
       ),
@@ -5071,15 +5634,20 @@ class _OutlinedAction extends StatelessWidget {
 }
 
 class _DetailLine extends StatelessWidget {
-  const _DetailLine({required this.label, required this.value});
+  const _DetailLine({
+    required this.label,
+    required this.value,
+    this.valueMaxLines = 1,
+  });
 
   final String label;
   final String value;
+  final int valueMaxLines;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 36,
+      height: valueMaxLines > 1 ? 50 : 36,
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: _ScanColors.border)),
       ),
@@ -5101,9 +5669,10 @@ class _DetailLine extends StatelessWidget {
               message: value,
               child: Text(
                 value,
-                maxLines: 1,
+                maxLines: valueMaxLines,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.end,
+                softWrap: valueMaxLines > 1,
                 style: _monoStyle(context).copyWith(color: _ScanColors.text),
               ),
             ),
@@ -5212,17 +5781,439 @@ class _AppTitle extends StatelessWidget {
   }
 }
 
-class _Breadcrumb extends StatefulWidget {
-  const _Breadcrumb({required this.target, this.onTap});
+class _HeaderTargetPicker extends StatelessWidget {
+  const _HeaderTargetPicker({
+    required this.activeTarget,
+    required this.targetChoices,
+    required this.isLoadingTargetChoices,
+    required this.runtimeProof,
+    required this.scanActionLabel,
+    required this.canPickTarget,
+    required this.canScan,
+    required this.canRepairPermission,
+    required this.onPickTarget,
+    required this.onChooseTarget,
+    required this.onChooseFolderTarget,
+    required this.onPermissionProbe,
+    required this.onPermissionRepair,
+    required this.onScan,
+  });
+
+  final ScanTarget activeTarget;
+  final List<ScanTargetChoice> targetChoices;
+  final bool isLoadingTargetChoices;
+  final RuntimeProof runtimeProof;
+  final String scanActionLabel;
+  final bool canPickTarget;
+  final bool canScan;
+  final bool canRepairPermission;
+  final VoidCallback onPickTarget;
+  final ValueChanged<ScanTargetChoice> onChooseTarget;
+  final VoidCallback onChooseFolderTarget;
+  final VoidCallback onPermissionProbe;
+  final VoidCallback onPermissionRepair;
+  final VoidCallback? onScan;
+
+  @override
+  Widget build(BuildContext context) {
+    return MenuAnchor(
+      alignmentOffset: const Offset(0, 8),
+      style: MenuStyle(
+        backgroundColor: const WidgetStatePropertyAll(_ScanColors.panel),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        side: const WidgetStatePropertyAll(
+          BorderSide(color: _ScanColors.border),
+        ),
+        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+      ),
+      menuChildren: [
+        Builder(
+          builder: (context) {
+            final controller = MenuController.maybeOf(context);
+            return _HeaderTargetMenu(
+              activeTarget: activeTarget,
+              targetChoices: targetChoices,
+              isLoadingTargetChoices: isLoadingTargetChoices,
+              runtimeProof: runtimeProof,
+              scanActionLabel: scanActionLabel,
+              canPickTarget: canPickTarget,
+              canScan: canScan,
+              canRepairPermission: canRepairPermission,
+              onPickTarget: () {
+                controller?.close();
+                onPickTarget();
+              },
+              onChooseTarget: onChooseTarget,
+              onChooseFolderTarget: () {
+                controller?.close();
+                onChooseFolderTarget();
+              },
+              onPermissionProbe: onPermissionProbe,
+              onPermissionRepair: onPermissionRepair,
+              onScan: () {
+                onScan?.call();
+                controller?.close();
+              },
+            );
+          },
+        ),
+      ],
+      builder: (context, controller, child) {
+        return _BreadcrumbButton(
+          target: activeTarget,
+          expanded: controller.isOpen,
+          onTap: () {
+            controller.isOpen ? controller.close() : controller.open();
+          },
+        );
+      },
+    );
+  }
+}
+
+class _HeaderTargetMenu extends StatelessWidget {
+  const _HeaderTargetMenu({
+    required this.activeTarget,
+    required this.targetChoices,
+    required this.isLoadingTargetChoices,
+    required this.runtimeProof,
+    required this.scanActionLabel,
+    required this.canPickTarget,
+    required this.canScan,
+    required this.canRepairPermission,
+    required this.onPickTarget,
+    required this.onChooseTarget,
+    required this.onChooseFolderTarget,
+    required this.onPermissionProbe,
+    required this.onPermissionRepair,
+    required this.onScan,
+  });
+
+  final ScanTarget activeTarget;
+  final List<ScanTargetChoice> targetChoices;
+  final bool isLoadingTargetChoices;
+  final RuntimeProof runtimeProof;
+  final String scanActionLabel;
+  final bool canPickTarget;
+  final bool canScan;
+  final bool canRepairPermission;
+  final VoidCallback onPickTarget;
+  final ValueChanged<ScanTargetChoice> onChooseTarget;
+  final VoidCallback onChooseFolderTarget;
+  final VoidCallback onPermissionProbe;
+  final VoidCallback onPermissionRepair;
+  final VoidCallback onScan;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.cleanDiskL10n;
+    final choices = targetChoices.take(6).toList(growable: false);
+
+    return SizedBox(
+      key: const ValueKey('scan-target-header-menu'),
+      width: 390,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SectionCaption(l10n.scanScopeSection.toUpperCase()),
+            const SizedBox(height: 8),
+            _HeaderTargetMenuCurrent(target: activeTarget),
+            const SizedBox(height: 10),
+            if (isLoadingTargetChoices)
+              const LinearProgressIndicator(
+                minHeight: 3,
+                color: _ScanColors.cyan,
+                backgroundColor: _ScanColors.progressTrack,
+              )
+            else
+              for (final choice in choices)
+                _HeaderTargetMenuChoice(
+                  choice: choice,
+                  selected: choice.target.path.value == activeTarget.path.value,
+                  onTap: () => onChooseTarget(choice),
+                ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _FlatMenuAction(
+                    key: const ValueKey('scan-target-menu-pick-folder-action'),
+                    icon: Icons.folder_open_outlined,
+                    label: l10n.targetPickAction,
+                    onTap: canPickTarget ? onChooseFolderTarget : null,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _FlatMenuAction(
+                    key: const ValueKey('scan-target-menu-open-picker-action'),
+                    icon: Icons.tune,
+                    label: l10n.targetOtherPathAction,
+                    onTap: canPickTarget ? onPickTarget : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _HeaderPermissionLine(
+              proof: runtimeProof,
+              onProbe: onPermissionProbe,
+              onRepair: canRepairPermission ? onPermissionRepair : null,
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 40,
+              child: FilledButton.icon(
+                key: const ValueKey('scan-target-menu-scan-action'),
+                onPressed: canScan ? onScan : null,
+                icon: const Icon(Icons.play_arrow, size: 18),
+                label: Text(scanActionLabel),
+                style: FilledButton.styleFrom(
+                  backgroundColor: _ScanColors.cyan,
+                  foregroundColor: _ScanColors.onPrimary,
+                  disabledBackgroundColor: _ScanColors.input,
+                  disabledForegroundColor: _ScanColors.textSoft,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderTargetMenuCurrent extends StatelessWidget {
+  const _HeaderTargetMenuCurrent({required this.target});
 
   final ScanTarget target;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('scan-target-menu-current'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: _ScanColors.input,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.folder_open_outlined,
+            color: _ScanColors.cyan,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              target.path.value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _monoStyle(context).copyWith(color: _ScanColors.text),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeaderTargetMenuChoice extends StatelessWidget {
+  const _HeaderTargetMenuChoice({
+    required this.choice,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final ScanTargetChoice choice;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.cleanDiskL10n;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: ValueKey('scan-target-menu-choice-${choice.id}'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          height: 38,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: selected ? _ScanColors.selectedSoft : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                _targetChoiceIcon(choice.kind),
+                color: selected ? _ScanColors.cyan : _ScanColors.textSoft,
+                size: 17,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _targetChoiceLabel(l10n, choice),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _bodyStyle(context).copyWith(
+                    color: selected ? _ScanColors.cyan : _ScanColors.text,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                  ),
+                ),
+              ),
+              Flexible(
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 150),
+                    child: Text(
+                      choice.target.path.value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.end,
+                      style: _monoStyle(
+                        context,
+                      ).copyWith(color: _ScanColors.textSoft, fontSize: 12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FlatMenuAction extends StatelessWidget {
+  const _FlatMenuAction({
+    super.key,
+    required this.icon,
+    required this.label,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
   final VoidCallback? onTap;
 
   @override
-  State<_Breadcrumb> createState() => _BreadcrumbState();
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 34,
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 16),
+        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: _ScanColors.cyan,
+          disabledForegroundColor: _ScanColors.textSoft.withAlpha(120),
+          side: const BorderSide(color: _ScanColors.border),
+          padding: const EdgeInsets.symmetric(horizontal: 9),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      ),
+    );
+  }
 }
 
-class _BreadcrumbState extends State<_Breadcrumb> {
+class _HeaderPermissionLine extends StatelessWidget {
+  const _HeaderPermissionLine({
+    required this.proof,
+    required this.onProbe,
+    this.onRepair,
+  });
+
+  final RuntimeProof proof;
+  final VoidCallback onProbe;
+  final VoidCallback? onRepair;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.cleanDiskL10n;
+    final probe = proof.permissionProbe.status;
+    final color = _permissionProbeColor(probe);
+    final text = _permissionProbeText(l10n, probe);
+
+    return Container(
+      key: const ValueKey('scan-target-menu-permission-line'),
+      height: 36,
+      decoration: const BoxDecoration(
+        border: Border(
+          top: BorderSide(color: _ScanColors.border),
+          bottom: BorderSide(color: _ScanColors.border),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.verified_user_outlined, color: color, size: 17),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${l10n.permissionProofTitle}: $text',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _bodyStyle(context).copyWith(color: _ScanColors.textSoft),
+            ),
+          ),
+          IconButton(
+            onPressed: onProbe,
+            tooltip: l10n.permissionProbeAction,
+            icon: const Icon(Icons.refresh, size: 16),
+            color: _ScanColors.cyan,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+          ),
+          if (onRepair != null)
+            IconButton(
+              key: const ValueKey('permission-repair-action'),
+              onPressed: onRepair,
+              tooltip: _permissionActionText(l10n, proof),
+              icon: const Icon(Icons.settings_suggest_outlined, size: 16),
+              color: _ScanColors.yellow,
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BreadcrumbButton extends StatefulWidget {
+  const _BreadcrumbButton({
+    required this.target,
+    required this.expanded,
+    this.onTap,
+  });
+
+  final ScanTarget target;
+  final bool expanded;
+  final VoidCallback? onTap;
+
+  @override
+  State<_BreadcrumbButton> createState() => _BreadcrumbButtonState();
+}
+
+class _BreadcrumbButtonState extends State<_BreadcrumbButton> {
   bool _hovered = false;
 
   void _setHovered(bool value) {
@@ -5247,7 +6238,9 @@ class _BreadcrumbState extends State<_Breadcrumb> {
             ? _ScanColors.selectedSoft.withValues(alpha: 0.56)
             : _ScanColors.input,
         border: Border.all(
-          color: _hovered && isInteractive
+          color: widget.expanded
+              ? _ScanColors.cyan
+              : _hovered && isInteractive
               ? _ScanColors.cyan.withValues(alpha: 0.72)
               : _ScanColors.border,
         ),
@@ -5269,6 +6262,14 @@ class _BreadcrumbState extends State<_Breadcrumb> {
                 overflow: TextOverflow.ellipsis,
                 style: _bodyStyle(context).copyWith(color: _ScanColors.text),
               ),
+            ),
+            const SizedBox(width: 6),
+            Icon(
+              widget.expanded
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.keyboard_arrow_down_rounded,
+              color: _ScanColors.textSoft,
+              size: 18,
             ),
           ],
         ),
@@ -5566,6 +6567,88 @@ String _diskUsageMapSummaryText(
     return '$sizeText - $itemText';
   }
   return '${focusedNode.name} - $sizeText - $itemText';
+}
+
+final class _DiskUsageMapBreadcrumbItem {
+  const _DiskUsageMapBreadcrumbItem({
+    required this.label,
+    required this.nodeId,
+    required this.selected,
+  });
+
+  final String label;
+  final NodeId? nodeId;
+  final bool selected;
+}
+
+List<_DiskUsageMapBreadcrumbItem> _diskUsageMapBreadcrumbItems({
+  required ScanWorkspaceStore store,
+  required ScanTarget activeTarget,
+}) {
+  final focusedNode = store.diskUsageMapFocusNode;
+  final rootLabel = _targetDisplayName(activeTarget);
+  if (focusedNode == null) {
+    return [
+      _DiskUsageMapBreadcrumbItem(
+        label: rootLabel,
+        nodeId: null,
+        selected: true,
+      ),
+    ];
+  }
+
+  final rowsById = <NodeId, NodePageItem>{};
+  final rootNode = store.diskUsageMapRootNode;
+  if (rootNode != null) {
+    rowsById[rootNode.nodeId] = rootNode;
+  }
+  for (final row in store.diskUsageMapAllRows) {
+    rowsById[row.nodeId] = row;
+  }
+  for (final row in store.visibleRows) {
+    rowsById[row.nodeId] = row;
+  }
+  final focusedPath = <NodePageItem>[];
+  var current = focusedNode;
+  final visited = <NodeId>{};
+  while (visited.add(current.nodeId)) {
+    focusedPath.add(current);
+    final parentId = current.parentId;
+    if (parentId == null ||
+        parentId == store.viewport.parentId ||
+        parentId == store.primaryRootNodeId ||
+        parentId == store.diskUsageMapRootNode?.nodeId) {
+      break;
+    }
+    final parent = rowsById[parentId];
+    if (parent == null) {
+      break;
+    }
+    current = parent;
+  }
+
+  return [
+    _DiskUsageMapBreadcrumbItem(
+      label: rootLabel,
+      nodeId: null,
+      selected: false,
+    ),
+    for (final row in focusedPath.reversed)
+      _DiskUsageMapBreadcrumbItem(
+        label: row.name,
+        nodeId: row.nodeId,
+        selected: row.nodeId == focusedNode.nodeId,
+      ),
+  ];
+}
+
+NodeId? _diskUsageMapParentBreadcrumbNodeId(
+  List<_DiskUsageMapBreadcrumbItem> items,
+) {
+  if (items.length <= 1) {
+    return null;
+  }
+  return items[items.length - 2].nodeId;
 }
 
 DiskUsageMapProjection? _diskUsageMapProjection({
@@ -5894,16 +6977,6 @@ String _targetChoiceLabel(
   };
 }
 
-List<ScanTargetChoice> _railTargetChoices(
-  List<ScanTargetChoice> choices,
-  ScanTarget activeTarget,
-) {
-  return choices
-      .where((choice) => choice.target.path.value != activeTarget.path.value)
-      .take(6)
-      .toList(growable: false);
-}
-
 IconData _targetChoiceIcon(ScanTargetChoiceKind kind) {
   return switch (kind) {
     ScanTargetChoiceKind.home => Icons.home_outlined,
@@ -5920,7 +6993,7 @@ String _displayPathForSelection({
   required ScanTarget target,
   required NodePageItem selected,
 }) {
-  final parts = _visibleTreePathParts(store, selected.nodeId);
+  final parts = _knownTreePathParts(store, selected.nodeId);
   if (parts.isEmpty) {
     return _joinDisplayPath(target.path.value, ['...', selected.name]);
   }
@@ -5928,6 +7001,47 @@ String _displayPathForSelection({
     target.path.value,
     _pathPartsRelativeToTarget(target.path.value, parts),
   );
+}
+
+List<String> _knownTreePathParts(ScanWorkspaceStore store, NodeId nodeId) {
+  final visibleParts = _visibleTreePathParts(store, nodeId);
+  if (visibleParts.isNotEmpty) {
+    return visibleParts;
+  }
+
+  final rowsById = <NodeId, NodePageItem>{};
+  for (final row in store.visibleTreeRows) {
+    rowsById[row.item.nodeId] = row.item;
+  }
+  for (final row in store.visibleRows) {
+    rowsById.putIfAbsent(row.nodeId, () => row);
+  }
+  for (final row in store.diskUsageMapAllRows) {
+    rowsById.putIfAbsent(row.nodeId, () => row);
+  }
+
+  final selected = rowsById[nodeId];
+  if (selected == null) {
+    return const [];
+  }
+
+  final parts = <String>[];
+  var current = selected;
+  final treeRootParentId = store.viewport.parentId;
+  final visited = <NodeId>{};
+  while (visited.add(current.nodeId)) {
+    parts.add(current.name);
+    final parentId = current.parentId;
+    if (parentId == null || parentId == treeRootParentId) {
+      break;
+    }
+    final parent = rowsById[parentId];
+    if (parent == null) {
+      return const [];
+    }
+    current = parent;
+  }
+  return parts.reversed.toList(growable: false);
 }
 
 List<String> _visibleTreePathParts(ScanWorkspaceStore store, NodeId nodeId) {

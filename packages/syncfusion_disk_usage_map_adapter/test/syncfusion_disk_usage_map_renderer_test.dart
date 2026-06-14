@@ -80,6 +80,47 @@ void main() {
     expect(find.text('Downloads'), findsWidgets);
   });
 
+  testWidgets('fills the full width of a wide treemap viewport', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark(),
+        home: Scaffold(
+          body: SizedBox(
+            width: 1000,
+            height: 260,
+            child: DiskUsageMapView(
+              projection: _wideProjection,
+              renderer: const SyncfusionDiskUsageMapRenderer(),
+              labels: _labels,
+              style: _style,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final mapRect = tester.getRect(find.byType(DiskUsageMapView));
+    final slotKeys = [
+      for (final tile in _wideProjection.visualTiles)
+        ValueKey('syncfusion-disk-map-slot-${tile.nodeId}'),
+    ];
+    final slotRects = [
+      for (final key in slotKeys) tester.getRect(find.byKey(key)),
+    ];
+    final union = slotRects.reduce(
+      (value, rect) => value.expandToInclude(rect),
+    );
+
+    expect(union.left, closeTo(mapRect.left, 0.1));
+    expect(union.top, closeTo(mapRect.top, 0.1));
+    expect(union.right, closeTo(mapRect.right, 0.1));
+    expect(union.bottom, closeTo(mapRect.bottom, 0.1));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('keeps narrow tile label and size visible', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -217,6 +258,83 @@ const _unbalancedProjection = DiskUsageMapProjection(
       issueCount: 0,
       childCount: 0,
       hasMoreChildren: false,
+    ),
+  ],
+);
+
+const _wideProjection = DiskUsageMapProjection(
+  scanSnapshotId: 'snapshot-wide',
+  rootNodeId: 'root',
+  projectionId: 'projection-wide',
+  kind: DiskUsageMapKind.treemap,
+  sizeBasis: DiskUsageMapSizeBasis.logicalBytes,
+  totalSizeBytesDecimal: '386400000000',
+  freshness: DiskUsageMapFreshness.current,
+  tiles: <DiskUsageMapTile>[
+    DiskUsageMapTile(
+      nodeId: 'node-belief',
+      parentNodeId: 'root',
+      label: 'belief',
+      sizeBytesDecimal: '175200000000',
+      percentOfRootBasisPoints: 4534,
+      colorKey: 'home',
+      depth: 1,
+      kind: DiskUsageMapTileKind.node,
+      issueCount: 0,
+      childCount: 15,
+      hasMoreChildren: true,
+    ),
+    DiskUsageMapTile(
+      nodeId: 'node-library',
+      parentNodeId: 'root',
+      label: 'Library',
+      sizeBytesDecimal: '128200000000',
+      percentOfRootBasisPoints: 3318,
+      colorKey: 'library',
+      depth: 1,
+      kind: DiskUsageMapTileKind.node,
+      issueCount: 0,
+      childCount: 12,
+      hasMoreChildren: true,
+    ),
+    DiskUsageMapTile(
+      nodeId: 'node-caches',
+      parentNodeId: 'root',
+      label: 'Caches',
+      sizeBytesDecimal: '38700000000',
+      percentOfRootBasisPoints: 1002,
+      colorKey: 'cache',
+      depth: 1,
+      kind: DiskUsageMapTileKind.node,
+      issueCount: 0,
+      childCount: 8,
+      hasMoreChildren: true,
+    ),
+    DiskUsageMapTile(
+      nodeId: 'node-downloads',
+      parentNodeId: 'root',
+      label: 'Downloads',
+      sizeBytesDecimal: '24800000000',
+      percentOfRootBasisPoints: 642,
+      colorKey: 'downloads',
+      depth: 1,
+      kind: DiskUsageMapTileKind.node,
+      issueCount: 0,
+      childCount: 4,
+      hasMoreChildren: true,
+    ),
+    DiskUsageMapTile(
+      nodeId: 'node-logs',
+      parentNodeId: 'root',
+      label: 'Logs',
+      sizeBytesDecimal: '9400000000',
+      percentOfRootBasisPoints: 243,
+      colorKey: 'logs',
+      depth: 1,
+      kind: DiskUsageMapTileKind.node,
+      issueCount: 0,
+      childCount: 2,
+      hasMoreChildren: true,
     ),
   ],
 );
