@@ -113,6 +113,7 @@ final class FakeScanRepository implements ScanRepository {
   static final downloadsNodeId = NodeId('7');
   static final applicationsNodeId = NodeId('8');
   static final systemNodeId = NodeId('9');
+  static final syntheticTargetRootNodeId = NodeId('1000000');
 
   void Function(ScanEventEnvelope envelope)? eventSink;
 
@@ -473,8 +474,10 @@ final class FakeScanRepository implements ScanRepository {
     if (path == null || path.isEmpty) {
       return rootNodeId;
     }
-    return switch (_normalizeFakePath(path)) {
+    final normalized = _normalizeFakePath(path);
+    final knownRoot = switch (normalized) {
       '/' => rootNodeId,
+      'C:/' => rootNodeId,
       '/Users' => usersNodeId,
       '/Users/belief' => homeNodeId,
       '/Users/belief/Library' => libraryNodeId,
@@ -483,8 +486,64 @@ final class FakeScanRepository implements ScanRepository {
       '/Users/belief/Downloads' => downloadsNodeId,
       '/Applications' => applicationsNodeId,
       '/System' => systemNodeId,
-      _ => rootNodeId,
+      _ when _isWindowsUserHomePath(normalized) => homeNodeId,
+      _ when _isWindowsDownloadsPath(normalized) => downloadsNodeId,
+      _ => null,
     };
+    if (knownRoot != null) {
+      return knownRoot;
+    }
+    if (_isWindowsAbsolutePath(normalized)) {
+      return _replaceSyntheticTargetRoot(normalized);
+    }
+    return rootNodeId;
+  }
+
+  NodeId _replaceSyntheticTargetRoot(String normalizedPath) {
+    _nodes[syntheticTargetRootNodeId] = _FakeNode.directory(
+      id: syntheticTargetRootNodeId,
+      parentId: null,
+      name: _syntheticTargetRootName(normalizedPath),
+      sizeBytes: 0,
+      childIds: const [],
+    );
+    return syntheticTargetRootNodeId;
+  }
+
+  String _syntheticTargetRootName(String normalizedPath) {
+    final driveRootMatch = RegExp(
+      r'^([A-Z]):/$',
+      caseSensitive: false,
+    ).firstMatch(normalizedPath);
+    if (driveRootMatch != null) {
+      return '${driveRootMatch.group(1)!.toUpperCase()}:\\';
+    }
+    final parts = normalizedPath
+        .split('/')
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+    return parts.isEmpty ? normalizedPath : parts.last;
+  }
+
+  bool _isWindowsAbsolutePath(String normalizedPath) {
+    return RegExp(
+      r'^[A-Z]:($|/)',
+      caseSensitive: false,
+    ).hasMatch(normalizedPath);
+  }
+
+  bool _isWindowsUserHomePath(String normalizedPath) {
+    return RegExp(
+      r'^[A-Z]:/Users/[^/]+$',
+      caseSensitive: false,
+    ).hasMatch(normalizedPath);
+  }
+
+  bool _isWindowsDownloadsPath(String normalizedPath) {
+    return RegExp(
+      r'^[A-Z]:/Users/[^/]+/Downloads$',
+      caseSensitive: false,
+    ).hasMatch(normalizedPath);
   }
 
   Set<NodeId> _subtreeNodeIds(NodeId rootId) {
@@ -505,7 +564,29 @@ final class FakeScanRepository implements ScanRepository {
   }
 
   String _normalizeFakePath(String path) {
-    final normalized = path.trim().replaceAll(RegExp(r'/+'), '/');
+    final slashNormalized = path
+        .trim()
+        .replaceAll('\\', '/')
+        .replaceAll(RegExp(r'/+'), '/');
+    if (slashNormalized.isEmpty || slashNormalized == '/') {
+      return '/';
+    }
+    final driveRootMatch = RegExp(
+      r'^([A-Z]):/?$',
+      caseSensitive: false,
+    ).firstMatch(slashNormalized);
+    if (driveRootMatch != null) {
+      return '${driveRootMatch.group(1)!.toUpperCase()}:/';
+    }
+    var normalized = slashNormalized;
+    final drivePrefixMatch = RegExp(
+      r'^([A-Z]):',
+      caseSensitive: false,
+    ).firstMatch(normalized);
+    if (drivePrefixMatch != null) {
+      normalized =
+          '${drivePrefixMatch.group(1)!.toUpperCase()}${normalized.substring(1)}';
+    }
     if (normalized.isEmpty || normalized == '/') {
       return '/';
     }

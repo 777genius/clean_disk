@@ -506,13 +506,13 @@ abstract class CleanDiskLocalizations {
   /// Details hint shown when the UI only has a shortened display path and cannot safely reveal it in the file manager.
   ///
   /// In en, this message translates to:
-  /// **'Full path is not available for this row. Expand from the tree root to reveal it.'**
+  /// **'Reveal is unavailable for a shortened path. Expand the folders in the tree to select the exact file or folder.'**
   String get revealUnavailableDisplayPath;
 
   /// Localized string for addToQueueAction.
   ///
   /// In en, this message translates to:
-  /// **'Add to review'**
+  /// **'Queue for Trash'**
   String get addToQueueAction;
 
   /// Disabled action label for a selected item that is already in the review list.

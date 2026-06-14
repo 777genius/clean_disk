@@ -1,6 +1,5 @@
 import 'package:clean_disk_design_system/clean_disk_design_system.dart';
 import 'package:flutter/material.dart';
-import 'package:syncfusion_flutter_treemap/treemap.dart';
 
 class SyncfusionDiskUsageMapRenderer implements DiskUsageMapRenderer {
   const SyncfusionDiskUsageMapRenderer();
@@ -32,114 +31,85 @@ class SyncfusionDiskUsageMapRenderer implements DiskUsageMapRenderer {
       borderRadius: BorderRadius.circular(renderContext.style.borderRadius),
       child: ColoredBox(
         color: renderContext.style.backgroundColor,
-        child: SfTreemap(
-          dataCount: data.entries.length,
-          weightValueMapper: (index) => data.entries[index].weight,
-          tileHoverColor: renderContext.style.selectedTileBorderColor
-              .withValues(alpha: 0.12),
-          tileHoverBorder: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(
-              renderContext.style.tileBorderRadius,
-            ),
-            side: BorderSide(
-              color: renderContext.style.focusedTileBorderColor,
-              width: 1.5,
-            ),
-          ),
-          tooltipSettings: TreemapTooltipSettings(
-            color: renderContext.style.backgroundColor,
-            borderColor: renderContext.style.borderColor,
-            borderWidth: 1,
-            borderRadius: BorderRadius.circular(
-              renderContext.style.borderRadius,
-            ),
-          ),
-          levels: <TreemapLevel>[
-            for (var levelIndex = 0; levelIndex < data.levelCount; levelIndex++)
-              TreemapLevel(
-                padding: EdgeInsets.all(renderContext.style.tileGap),
-                border: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(
-                    renderContext.style.tileBorderRadius,
-                  ),
-                  side: BorderSide(color: renderContext.style.tileBorderColor),
-                ),
-                groupMapper: (index) => data.entries[index].groupAt(levelIndex),
-                colorValueMapper: (syncfusionTile) {
-                  final tile = data.tileForGroup(syncfusionTile.group);
-                  if (tile == null) {
-                    return renderContext.style.otherColor;
-                  }
-
-                  return renderContext.style.colorForTile(tile);
-                },
-                tooltipBuilder: (context, syncfusionTile) {
-                  final tile = data.tileForGroup(syncfusionTile.group);
-                  if (tile == null) {
-                    return null;
-                  }
-
-                  return _SyncfusionDiskUsageMapTooltip(
-                    tile: tile,
-                    style: renderContext.style,
-                  );
-                },
-                labelBuilder: (context, syncfusionTile) {
-                  if (!syncfusionTile.hasDescendants) {
-                    return null;
-                  }
-                  final tile = data.tileForGroup(syncfusionTile.group);
-                  if (tile == null) {
-                    return const SizedBox.shrink();
-                  }
-
-                  return _SyncfusionDiskUsageMapTile(
-                    tile: tile,
-                    selected: tile.nodeId == renderContext.selectedNodeId,
-                    focused: tile.nodeId == renderContext.focusedNodeId,
-                    compact: syncfusionTile.hasDescendants,
-                    style: renderContext.style,
-                    onHoverChanged: renderContext.onTileHoverChanged,
-                    onSelected: renderContext.onTileSelected,
-                    onActivated: renderContext.onTileActivated,
-                    onContextMenu: renderContext.onTileContextMenu,
-                  );
-                },
-                itemBuilder: (context, syncfusionTile) {
-                  if (syncfusionTile.hasDescendants) {
-                    return null;
-                  }
-                  final tile = data.tileForGroup(syncfusionTile.group);
-                  if (tile == null) {
-                    return const SizedBox.shrink();
-                  }
-
-                  return _SyncfusionDiskUsageMapTile(
-                    tile: tile,
-                    selected: tile.nodeId == renderContext.selectedNodeId,
-                    focused: tile.nodeId == renderContext.focusedNodeId,
-                    compact: false,
-                    style: renderContext.style,
-                    onHoverChanged: renderContext.onTileHoverChanged,
-                    onSelected: renderContext.onTileSelected,
-                    onActivated: renderContext.onTileActivated,
-                    onContextMenu: renderContext.onTileContextMenu,
-                  );
-                },
-              ),
-          ],
+        child: _FilledDiskUsageTreemap(
+          data: data,
+          renderContext: renderContext,
         ),
       ),
     );
   }
 }
 
-final class _SyncfusionDiskUsageMapData {
-  const _SyncfusionDiskUsageMapData({
-    required this.entries,
-    required this.levelCount,
-    required this.tileByGroup,
+class _FilledDiskUsageTreemap extends StatelessWidget {
+  const _FilledDiskUsageTreemap({
+    required this.data,
+    required this.renderContext,
   });
+
+  final _SyncfusionDiskUsageMapData data;
+  final DiskUsageMapRenderContext renderContext;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final height = constraints.maxHeight;
+        if (!width.isFinite || !height.isFinite || width <= 0 || height <= 0) {
+          return const SizedBox.shrink();
+        }
+
+        final positionedTiles = _layoutEntries(
+          entries: data.entries,
+          rect: Rect.fromLTWH(0, 0, width, height),
+        );
+        if (positionedTiles.isEmpty) {
+          return const SizedBox.expand();
+        }
+
+        final tileGap = renderContext.style.tileGap;
+        final padding = EdgeInsets.all(tileGap / 2);
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            for (final positioned in positionedTiles)
+              Positioned.fromRect(
+                rect: positioned.rect,
+                child: SizedBox.expand(
+                  key: ValueKey(
+                    'syncfusion-disk-map-slot-${positioned.entry.tile.nodeId}',
+                  ),
+                  child: Padding(
+                    padding: padding,
+                    child: _SyncfusionDiskUsageMapTile(
+                      tile: positioned.entry.tile,
+                      selected:
+                          positioned.entry.tile.nodeId ==
+                          renderContext.selectedNodeId,
+                      focused:
+                          positioned.entry.tile.nodeId ==
+                          renderContext.focusedNodeId,
+                      compact:
+                          positioned.rect.width < 116 ||
+                          positioned.rect.height < 72,
+                      style: renderContext.style,
+                      onHoverChanged: renderContext.onTileHoverChanged,
+                      onSelected: renderContext.onTileSelected,
+                      onActivated: renderContext.onTileActivated,
+                      onContextMenu: renderContext.onTileContextMenu,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+final class _SyncfusionDiskUsageMapData {
+  const _SyncfusionDiskUsageMapData({required this.entries});
 
   factory _SyncfusionDiskUsageMapData.fromProjection(
     DiskUsageMapProjection projection,
@@ -148,48 +118,34 @@ final class _SyncfusionDiskUsageMapData {
       for (final tile in projection.visualTiles)
         if (_tileSizeBytes(tile) > BigInt.zero) tile,
     ];
-    final tileByGroup = <String, DiskUsageMapTile>{
-      for (final tile in tiles) tile.nodeId: tile,
-    };
     final entries = <_SyncfusionDiskUsageMapEntry>[];
     for (final tile in tiles) {
       entries.add(
-        _SyncfusionDiskUsageMapEntry(
-          groups: <String>[tile.nodeId],
-          weight: _tileWeight(tile),
-        ),
+        _SyncfusionDiskUsageMapEntry(tile: tile, weight: _tileWeight(tile)),
       );
     }
 
-    return _SyncfusionDiskUsageMapData(
-      entries: entries,
-      levelCount: entries.isEmpty ? 0 : 1,
-      tileByGroup: tileByGroup,
-    );
+    return _SyncfusionDiskUsageMapData(entries: entries);
   }
 
   final List<_SyncfusionDiskUsageMapEntry> entries;
-  final int levelCount;
-  final Map<String, DiskUsageMapTile> tileByGroup;
-
-  DiskUsageMapTile? tileForGroup(String group) => tileByGroup[group];
 }
 
 final class _SyncfusionDiskUsageMapEntry {
   const _SyncfusionDiskUsageMapEntry({
-    required this.groups,
+    required this.tile,
     required this.weight,
   });
 
-  final List<String> groups;
+  final DiskUsageMapTile tile;
   final double weight;
+}
 
-  String? groupAt(int index) {
-    if (index >= groups.length) {
-      return null;
-    }
-    return groups[index];
-  }
+final class _PositionedDiskUsageMapEntry {
+  const _PositionedDiskUsageMapEntry({required this.entry, required this.rect});
+
+  final _SyncfusionDiskUsageMapEntry entry;
+  final Rect rect;
 }
 
 double _tileWeight(DiskUsageMapTile tile) {
@@ -202,6 +158,107 @@ double _tileWeight(DiskUsageMapTile tile) {
 
 BigInt _tileSizeBytes(DiskUsageMapTile tile) {
   return BigInt.tryParse(tile.sizeBytesDecimal) ?? BigInt.zero;
+}
+
+List<_PositionedDiskUsageMapEntry> _layoutEntries({
+  required List<_SyncfusionDiskUsageMapEntry> entries,
+  required Rect rect,
+}) {
+  if (entries.isEmpty || rect.width <= 0 || rect.height <= 0) {
+    return const [];
+  }
+
+  final sorted = entries.toList(growable: false)
+    ..sort((a, b) => b.weight.compareTo(a.weight));
+  return _splitEntries(sorted, rect);
+}
+
+List<_PositionedDiskUsageMapEntry> _splitEntries(
+  List<_SyncfusionDiskUsageMapEntry> entries,
+  Rect rect,
+) {
+  if (entries.isEmpty) {
+    return const [];
+  }
+  if (entries.length == 1) {
+    return [
+      for (final entry in entries)
+        _PositionedDiskUsageMapEntry(entry: entry, rect: rect),
+    ];
+  }
+
+  final totalWeight = _entryWeight(entries);
+  if (totalWeight <= 0) {
+    return [
+      for (final entry in entries)
+        _PositionedDiskUsageMapEntry(entry: entry, rect: rect),
+    ];
+  }
+
+  var splitIndex = 1;
+  var leadingWeight = entries.first.weight;
+  var bestDistance = (totalWeight / 2 - leadingWeight).abs();
+  var runningWeight = leadingWeight;
+  for (var index = 1; index < entries.length - 1; index++) {
+    runningWeight += entries[index].weight;
+    final distance = (totalWeight / 2 - runningWeight).abs();
+    if (distance < bestDistance) {
+      splitIndex = index + 1;
+      leadingWeight = runningWeight;
+      bestDistance = distance;
+    }
+  }
+
+  final leading = entries.sublist(0, splitIndex);
+  final trailing = entries.sublist(splitIndex);
+  if (trailing.isEmpty) {
+    return [
+      for (final entry in entries)
+        _PositionedDiskUsageMapEntry(entry: entry, rect: rect),
+    ];
+  }
+
+  final leadingFraction = (leadingWeight / totalWeight).clamp(0.0, 1.0);
+  final splitVertical = rect.width >= rect.height;
+  final firstRect = splitVertical
+      ? Rect.fromLTWH(
+          rect.left,
+          rect.top,
+          rect.width * leadingFraction,
+          rect.height,
+        )
+      : Rect.fromLTWH(
+          rect.left,
+          rect.top,
+          rect.width,
+          rect.height * leadingFraction,
+        );
+  final secondRect = splitVertical
+      ? Rect.fromLTWH(
+          firstRect.right,
+          rect.top,
+          rect.right - firstRect.right,
+          rect.height,
+        )
+      : Rect.fromLTWH(
+          rect.left,
+          firstRect.bottom,
+          rect.width,
+          rect.bottom - firstRect.bottom,
+        );
+
+  return [
+    ..._splitEntries(leading, firstRect),
+    ..._splitEntries(trailing, secondRect),
+  ];
+}
+
+double _entryWeight(List<_SyncfusionDiskUsageMapEntry> entries) {
+  var total = 0.0;
+  for (final entry in entries) {
+    total += entry.weight;
+  }
+  return total;
 }
 
 class _SyncfusionDiskUsageMapTile extends StatelessWidget {
@@ -263,11 +320,12 @@ class _SyncfusionDiskUsageMapTile extends StatelessWidget {
             opacity: enabled ? 1 : style.disabledOpacity,
             child: Container(
               width: double.infinity,
-              height: compact ? 30 : double.infinity,
+              height: double.infinity,
               padding: compact
                   ? const EdgeInsets.symmetric(horizontal: 6, vertical: 4)
                   : const EdgeInsets.all(6),
               decoration: BoxDecoration(
+                color: style.colorForTile(tile),
                 borderRadius: BorderRadius.circular(style.tileBorderRadius),
                 border: Border.all(color: borderColor, width: selected ? 2 : 1),
               ),
@@ -343,55 +401,6 @@ class _SyncfusionDiskUsageMapTile extends StatelessWidget {
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SyncfusionDiskUsageMapTooltip extends StatelessWidget {
-  const _SyncfusionDiskUsageMapTooltip({
-    required this.tile,
-    required this.style,
-  });
-
-  final DiskUsageMapTile tile;
-  final DiskUsageMapStyle style;
-
-  @override
-  Widget build(BuildContext context) {
-    final sizeText = _formatSizeBytesDecimal(tile.sizeBytesDecimal);
-    return Padding(
-      padding: const EdgeInsets.all(10),
-      child: DefaultTextStyle(
-        style:
-            Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: style.textColor,
-              letterSpacing: 0,
-            ) ??
-            TextStyle(color: style.textColor, letterSpacing: 0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              tile.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 4),
-            Text(sizeText),
-            if (tile.displayPathHint != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                tile.displayPathHint!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: style.mutedTextColor),
-              ),
-            ],
-          ],
         ),
       ),
     );

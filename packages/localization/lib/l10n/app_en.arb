@@ -274,11 +274,11 @@
   "@revealBusyAction": {
     "description": "Details action label shown while the selected file or folder is being revealed in the platform file manager."
   },
-  "revealUnavailableDisplayPath": "Full path is not available for this row. Expand from the tree root to reveal it.",
+  "revealUnavailableDisplayPath": "Reveal is unavailable for a shortened path. Expand the folders in the tree to select the exact file or folder.",
   "@revealUnavailableDisplayPath": {
     "description": "Details hint shown when the UI only has a shortened display path and cannot safely reveal it in the file manager."
   },
-  "addToQueueAction": "Add to review",
+  "addToQueueAction": "Queue for Trash",
   "@addToQueueAction": {
     "description": "Localized string for addToQueueAction."
   },

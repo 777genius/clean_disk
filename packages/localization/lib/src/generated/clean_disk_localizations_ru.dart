@@ -222,10 +222,10 @@ class CleanDiskLocalizationsRu extends CleanDiskLocalizations {
 
   @override
   String get revealUnavailableDisplayPath =>
-      'Полный путь для этой строки недоступен. Раскрой дерево от корня, чтобы открыть ее.';
+      'Открытие недоступно для укороченного пути. Раскрой папки в дереве, чтобы выбрать точный файл или папку.';
 
   @override
-  String get addToQueueAction => 'В список';
+  String get addToQueueAction => 'К удалению';
 
   @override
   String get reviewAddedAction => 'В списке';
