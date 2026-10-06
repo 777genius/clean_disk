@@ -2,6 +2,8 @@
 
 Universal Flutter workspace for a disk usage analyzer and cleanup tool.
 
+<img width="1306" height="749" alt="image" src="https://github.com/user-attachments/assets/5beb9b31-4a91-480e-8f35-f843314378ef" />
+
 ## Core Rule
 
 Контракты проектируем как Pro, реализацию делаем как MVP.
