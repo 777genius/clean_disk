@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 777genius/flutter_headless
-          ref: 482dc2924e1f7fb3707ad726b6a64181863c5730
+          ref: facff179487e1c8cf6beb8b2b486d1b4bec947f9
           path: headless
 
       - name: Checkout Fast Build Runner
