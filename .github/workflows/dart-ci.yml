@@ -52,4 +52,6 @@ jobs:
 
       - name: Test Dart/Flutter packages
         working-directory: clean_disk
-        run: dart run melos run test
+        # Mirror melos test script without requiring an additional FVM install;
+        # this job already pins the exact Flutter SDK version above.
+        run: dart run melos exec --concurrency=1 --dir-exists=test -- "flutter test"
