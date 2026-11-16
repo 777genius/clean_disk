@@ -1,0 +1,55 @@
+name: Dart CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout Clean Disk
+        uses: actions/checkout@v4
+        with:
+          path: clean_disk
+
+      # pubspec.yaml intentionally resolves local workspace overrides.
+      # Keep the sibling checkout layout identical to README instructions.
+      - name: Checkout Flutter Headless
+        uses: actions/checkout@v4
+        with:
+          repository: 777genius/flutter_headless
+          ref: 3b368ca671314b094774e84248c1d7abf70c0d7d
+          path: headless
+
+      - name: Checkout Fast Build Runner
+        uses: actions/checkout@v4
+        with:
+          repository: 777genius/fast_build_runner
+          ref: c908a218cb9a663bc4366499e9b2fbfcb895df6b
+          path: fast_build_runner
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9'
+          channel: stable
+          cache: true
+
+      - name: Resolve Dart dependencies
+        working-directory: clean_disk
+        run: flutter pub get
+
+      - name: Analyze Dart/Flutter
+        working-directory: clean_disk
+        run: flutter analyze
+
+      - name: Test Dart/Flutter packages
+        working-directory: clean_disk
+        run: dart run melos run test
