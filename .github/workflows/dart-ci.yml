@@ -1,0 +1,57 @@
+name: Dart CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout Clean Disk
+        uses: actions/checkout@v4
+        with:
+          path: clean_disk
+
+      # pubspec.yaml intentionally resolves local workspace overrides.
+      # Keep the sibling checkout layout identical to README instructions.
+      - name: Checkout Flutter Headless
+        uses: actions/checkout@v4
+        with:
+          repository: 777genius/flutter_headless
+          ref: facff179487e1c8cf6beb8b2b486d1b4bec947f9
+          path: headless
+
+      - name: Checkout Fast Build Runner
+        uses: actions/checkout@v4
+        with:
+          repository: 777genius/fast_build_runner
+          ref: c908a218cb9a663bc4366499e9b2fbfcb895df6b
+          path: fast_build_runner
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9'
+          channel: stable
+          cache: true
+
+      - name: Resolve Dart dependencies
+        working-directory: clean_disk
+        run: flutter pub get
+
+      - name: Analyze Dart/Flutter
+        working-directory: clean_disk
+        run: flutter analyze
+
+      - name: Test Dart/Flutter packages
+        working-directory: clean_disk
+        # Mirror melos test script without requiring an additional FVM install;
+        # this job already pins the exact Flutter SDK version above.
+        run: dart run melos exec --concurrency=1 --dir-exists=test -- "flutter test"
